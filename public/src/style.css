@@ -1,0 +1,57 @@
+/* public/src/style.css */
+
+/*
+ * 1. 引入 Tailwind 的基础样式 (preflight)。
+ * 这会重置一些浏览器默认样式，提供一个一致的起点。
+ */
+@tailwind base;
+
+/*
+ * 2. 引入 Tailwind 的组件类。
+ * 这些是预设的一些可重用组件样式，例如按钮、卡片等 (如果您选择使用它们)。
+ * 如果您主要使用工具类来构建自己的组件，这部分可能不是必需的，
+ * 但通常建议包含进来。
+ */
+@tailwind components;
+
+/*
+ * 3. 引入 Tailwind 的工具类。
+ * 这是 Tailwind 的核心，提供了大量的原子 CSS 类 (如 m-4, p-2, text-red-500, flex 等)
+ * 让您可以直接在 HTML 中快速构建界面。
+ */
+@tailwind utilities;
+
+/*
+ * 4. (可选) 在这里添加您自己的自定义基础样式或全局组件样式。
+ * 例如:
+ * body {
+ * @apply bg-gray-100 text-gray-800;
+ * }
+ * .custom-button {
+ * @apply py-2 px-4 bg-blue-500 text-white font-semibold rounded-lg shadow-md;
+ * }
+ * h1, h2, h3 {
+ * @apply font-sans; // 确保标题也使用与正文一致的字体（如果需要）
+ * }
+ */
+
+/* 确保您的主应用容器和HTML/Body高度设置能正确工作 */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    /* overflow: hidden; /* 移除这个，让 app-container 控制整体滚动或不滚动 */
+}
+
+/* 确保 datetime-local 输入框的日历图标在深色模式下可见 */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+}
+
+/* 可以在这里为整个应用定义一个默认字体，如果 tailwind.config.js 中没有完全覆盖的话 */
+body {
+    font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    /* 与您 index.html 中 app-container 的颜色和背景色协调 */
+    background-color: #171a21; /* Tailwind bg-gray-900 or a custom dark color */
+    color: #e5e7eb; /* Tailwind text-gray-200 */
+}
