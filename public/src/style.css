@@ -1,57 +1,131 @@
 /* public/src/style.css */
 
-/*
- * 1. 引入 Tailwind 的基础样式 (preflight)。
- * 这会重置一些浏览器默认样式，提供一个一致的起点。
- */
 @tailwind base;
-
-/*
- * 2. 引入 Tailwind 的组件类。
- * 这些是预设的一些可重用组件样式，例如按钮、卡片等 (如果您选择使用它们)。
- * 如果您主要使用工具类来构建自己的组件，这部分可能不是必需的，
- * 但通常建议包含进来。
- */
 @tailwind components;
-
-/*
- * 3. 引入 Tailwind 的工具类。
- * 这是 Tailwind 的核心，提供了大量的原子 CSS 类 (如 m-4, p-2, text-red-500, flex 等)
- * 让您可以直接在 HTML 中快速构建界面。
- */
 @tailwind utilities;
 
-/*
- * 4. (可选) 在这里添加您自己的自定义基础样式或全局组件样式。
- * 例如:
- * body {
- * @apply bg-gray-100 text-gray-800;
- * }
- * .custom-button {
- * @apply py-2 px-4 bg-blue-500 text-white font-semibold rounded-lg shadow-md;
- * }
- * h1, h2, h3 {
- * @apply font-sans; // 确保标题也使用与正文一致的字体（如果需要）
- * }
- */
+@layer base {
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background-color: #171a21; /* Tailwind bg-gray-900 análogo ou sua cor base escura personalizada */
+        color: #e5e7eb; /* Tailwind text-gray-200 análogo */
+        font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    }
 
-/* 确保您的主应用容器和HTML/Body高度设置能正确工作 */
-html, body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
-    /* overflow: hidden; /* 移除这个，让 app-container 控制整体滚动或不滚动 */
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.8); /* Torna o ícone do seletor de data e hora visível no modo escuro */
+    }
+
+    /* Estilos base unificados para elementos de formulário */
+    input[type="text"],
+    input[type="password"],
+    input[type="datetime-local"],
+    select,
+    textarea {
+        @apply bg-[#1e2128] border border-gray-600 rounded text-white;
+        @apply focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500; /* Cor de foco padrão, pode ser sobrescrita */
+        @apply px-3 py-2; /* Preenchimento unificado */
+        line-height: 1.25rem; /* Alinhamento vertical consistente para o texto */
+    }
+    select {
+         /* Ajusta a altura para corresponder aos inputs de texto, considerando preenchimento e borda */
+         height: calc(1.25rem + 0.5rem * 2 + 2px); /* line-height + py-2 (0.5rem topo + 0.5rem base) + borda-y (1px*2) */
+    }
+    textarea {
+        @apply font-sans text-sm; /* Garante que a fonte da textarea corresponda a outros inputs, se necessário */
+    }
 }
 
-/* 确保 datetime-local 输入框的日历图标在深色模式下可见 */
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.8);
-}
+@layer components {
+    /* Estilo Base Geral para Botões */
+    .btn {
+        @apply py-2 px-4 rounded-md font-semibold text-sm;
+        @apply transition-all duration-150 ease-in-out;
+        @apply inline-flex items-center justify-center; /* Garante que texto e ícones estejam centralizados verticalmente */
+        line-height: 1.25rem; /* Altura de linha base do Tailwind para fonte text-sm */
+        @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900; /* Cor de deslocamento do anel ajustada para tema escuro */
+    }
 
-/* 可以在这里为整个应用定义一个默认字体，如果 tailwind.config.js 中没有完全覆盖的话 */
-body {
-    font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    /* 与您 index.html 中 app-container 的颜色和背景色协调 */
-    background-color: #171a21; /* Tailwind bg-gray-900 or a custom dark color */
-    color: #e5e7eb; /* Tailwind text-gray-200 */
+    /* Variantes de Cor para Botões */
+    /* 主操作按钮 (如 "+ 新建配置") 使用 indigo-500 作为基准亮色 */
+    .btn-primary {
+        @apply bg-indigo-500 text-white hover:bg-indigo-600 focus:ring-indigo-400;
+    }
+    .btn-primary:disabled {
+        @apply bg-gray-500 cursor-not-allowed opacity-70;
+    }
+    .btn-success { 
+        @apply bg-green-500 text-white hover:bg-green-600 focus:ring-green-500;
+    }
+    .btn-success:disabled {
+        @apply bg-gray-500 cursor-not-allowed opacity-70;
+    }
+    .btn-danger { 
+        @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+    }
+    .btn-teal { /* 主题色为 teal 的操作按钮 (如 "+ 新建模板") */
+        @apply bg-teal-500 text-white hover:bg-teal-600 focus:ring-teal-400;
+    }
+    .btn-purple { /* 主题色为 purple 的操作按钮 (如 "+ 新建用户") */
+        @apply bg-purple-500 text-white hover:bg-purple-600 focus:ring-purple-400;
+    }
+    .btn-gray { 
+         @apply bg-gray-600 text-gray-100 hover:bg-gray-700 focus:ring-gray-500;
+    }
+    .btn-outline-indigo {
+        @apply text-indigo-400 border border-indigo-500 hover:bg-indigo-500 hover:text-white focus:ring-indigo-500;
+    }
+    .btn-outline-teal {
+        @apply text-teal-400 border border-teal-500 hover:bg-teal-500 hover:text-white focus:ring-teal-500;
+    }
+
+    /* Botões de Ação da Barra Lateral (Nova Configuração, Novo Modelo) */
+    .btn-sidebar-action {
+        @apply w-full mb-3 shadow-md hover:shadow-lg;
+        /* Cores específicas (btn-primary, btn-teal, btn-purple) serão aplicadas no HTML */
+    }
+
+    /* Botões de Aba do Editor */
+    .editor-tab {
+        @apply px-4 py-2 focus:outline-none;
+        line-height: 1.25rem;
+    }
+
+    /* Estilos de Item de Lista da Barra Lateral */
+    .sidebar-list-item {
+        @apply flex justify-between items-center px-3 py-2 my-1 rounded text-sm cursor-pointer transition-colors duration-150 ease-in-out;
+    }
+
+    .sidebar-list-item-inactive {
+        @apply bg-gray-800 text-gray-300 hover:bg-gray-700; /* Fundo escuro para inativos */
+    }
+
+    /* Estado ativo para itens de lista - 使用与导航按钮和主要操作按钮一致的亮色 */
+    .sidebar-list-item-active-indigo { 
+        @apply bg-indigo-500 text-white shadow-md; /* 亮靛蓝色，与导航按钮和 .btn-primary 激活状态一致 */
+    }
+    .sidebar-list-item-active-indigo:hover {
+        @apply bg-indigo-400; /* 悬停时更亮一点 */
+    }
+
+    .sidebar-list-item-active-teal { 
+        @apply bg-teal-500 text-white shadow-md; /* 亮蓝绿色 */
+    }
+     .sidebar-list-item-active-teal:hover {
+        @apply bg-teal-400; 
+    }
+    
+    .sidebar-list-item-active-purple { 
+        @apply bg-purple-500 text-white shadow-md; /* 亮紫色 */
+    }
+    .sidebar-list-item-active-purple:hover {
+        @apply bg-purple-400; 
+    }
+
+    /* Botão de ícone de exclusão em itens de lista */
+    .delete-btn-icon {
+        @apply text-gray-500 hover:text-red-400 p-1 rounded-full hover:bg-red-500 hover:bg-opacity-20 transition-colors;
+    }
 }
