@@ -2,15 +2,14 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" /> <!-- viewport-fit=cover 用于安全区域 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" /> 
     <title>Webhook Sender</title>
     <link rel="stylesheet" href="/assets/css/output.css">
     <style>
         html, body {
-            height: 100%; /* 仍然需要，但 overflow 由 app-container 控制 */
+            height: 100%; 
             margin: 0;
             padding: 0;
-            /* overflow: hidden; /* 移除，让 app-container 控制 */
             background-color: #171a21; 
             color: #e5e7eb; 
             font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
@@ -23,14 +22,11 @@
         .app-container {
             display: flex;
             flex-direction: column;
-            height: 100%; /* 使用百分比，或由JS动态设置 */
-            /* height: 100vh; /* vh 在移动端可能有问题，特别是键盘弹出时 */
-            /* height: calc(var(--vh, 1vh) * 100); /* JS会设置 --vh */
-            overflow: hidden; /* app-container 作为主要的滚动边界 */
+            height: 100%; 
+            overflow: hidden; 
         }
 
         .app-navbar {
-            /* ... 保持不变 ... */
             background-color: #1f2937; 
             padding: 0 1rem; 
             display: flex;
@@ -77,19 +73,17 @@
              display: flex;
              flex-direction: column;
              overflow-y: auto; 
-             max-height: 35vh; /* 进一步减小，为键盘和主内容留空间 */
-             /* padding-bottom: env(safe-area-inset-bottom); /* 如果侧边栏在底部可能被遮挡 */
+             max-height: 35vh; 
         }
         
         .app-view-content { 
             flex-grow: 1; 
             background-color: #23272e; 
             padding: 0.75rem; 
-            /* overflow-y: auto; /* 由 tab-content-wrapper 或 textarea 自身控制滚动 */
             display: flex; 
             flex-direction: column;
             min-height: 0; 
-            padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); /* 为底部安全区域留出空间 */
+            padding-bottom: calc(0.75rem + env(safe-area-inset-bottom)); 
         }
 
         @media (min-width: 768px) { /* md: breakpoint */
@@ -101,13 +95,12 @@
                 max-height: none; 
                 border-right: 1px solid #374151;
                 padding: 1rem; 
-                padding-bottom: 1rem; /* 恢复桌面端 padding-bottom */
+                padding-bottom: 1rem; 
             }
              .app-view-content {
                 padding: 1.5rem; 
-                padding-bottom: 1.5rem; /* 恢复桌面端 padding-bottom */
+                padding-bottom: 1.5rem; 
             }
-            /* ... (其他桌面端样式调整) ... */
         }
 
         #sender-view, #template-manager-view, #about-view, #welcome-screen, #user-management-view,
@@ -127,7 +120,7 @@
             flex-direction: column;
             flex-grow: 1;
             min-height: 0; 
-            overflow-y: hidden; /* 让内部的 .tab-pane 控制滚动 */
+            overflow-y: hidden; 
         }
 
         .tab-pane {
@@ -135,31 +128,35 @@
             flex-direction: column;
             flex-grow: 1; 
             min-height: 0;
-            overflow-y: auto; /* 单个标签页内容可以滚动 */
+            overflow-y: auto; 
         }
         
-        /* 特别是包含textarea的标签页 */
         #tab-content-body, 
         #template-body-input-container {
-            /* 继承 .tab-pane 的 flex 属性 */
         }
 
         #webhook-body, #template-body-input { 
             display: block; 
             width: 100%;
             flex-grow: 1; 
-            min-height: 60px; /* 再次减小最小高度 */
+            min-height: 60px; 
             resize: none; 
             overflow-y: auto; 
             padding: 0.5rem; 
             box-sizing: border-box; 
         }
         
-        #headers-list, #scheduled-task-list, #history-log-list, #template-headers-list, #user-list-container {
+        #headers-list, #scheduled-task-list, #history-log-list, #template-headers-list, #user-list-container,
+        #template-allowed-users-list { /* Added template-allowed-users-list for scrolling */
             flex-grow: 1;
             overflow-y: auto;
             min-height: 0;
         }
+         #multi-template-selector { /* For multi-template selector scrolling */
+            max-height: 10rem; /* Adjust as needed, e.g., max-h-40 */
+            overflow-y: auto;
+        }
+
 
         .editor-tab {
             padding: 0.5rem 0.75rem; 
@@ -174,17 +171,14 @@
     </style>
 </head>
 <body>
-    <!-- HTML 结构与之前版本 (ID: index_html_responsive_v3_textarea_scroll_fix) 保持一致 -->
-    <!-- 主要的修改在上面的 <style> 块和即将提供的 renderer.js 中 -->
     <div class="app-container font-sans text-white">
         <nav class="app-navbar">
             <div class="app-title">
-                <img src="/icon.png" alt="App Icon" />
-                <span>Webhook Sender</span>
+                <img src="/icon.png" alt="App Icon" /> <span>Webhook Sender</span>
             </div>
             <div>
                 <span id="userInfo" class="user-info"></span>
-                <button id="logoutButton" class="btn btn-danger">登出</button>
+                <button id="logoutButton" class="btn btn-danger btn-sm">登出</button>
             </div>
         </nav>
 
@@ -225,16 +219,20 @@
                             <input type="text" id="webhook-name" placeholder="发送配置名称" class="text-lg md:text-xl font-semibold bg-transparent focus:outline-none text-gray-100 w-full sm:flex-grow mr-0 sm:mr-4 mb-2 sm:mb-0 p-1 rounded border border-transparent focus:border-indigo-500">
                             <button id="send-now-btn" class="btn btn-success shadow-md hover:shadow-lg w-full sm:w-auto">立即发送</button>
                         </div>
+                        
                         <div class="mb-2 md:mb-3 flex-shrink-0">
-                            <label for="template-select" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">选择地址模板:</label>
-                            <select id="template-select" class="w-full"></select> 
-                            <div id="selected-template-url-container" class="mt-1 md:mt-2 p-1.5 md:p-2 bg-[#1a1d24] rounded border border-gray-700/50 hidden">
-                               <div class="flex justify-between items-center">
-                                    <p id="selected-template-url-display" class="text-xs md:text-sm text-gray-400 truncate"></p>
-                                    <button id="toggle-url-visibility-btn" class="ml-2 text-gray-500 hover:text-white">
-                                        </button>
-                               </div>
+                            <label class="block text-xs md:text-sm font-medium text-gray-300 mb-1">选择地址模板 (可多选):</label>
+                            <div id="multi-template-selector" class="max-h-40 overflow-y-auto bg-[#1a1d24] border border-gray-600 rounded p-2 space-y-1">
+                                <p class="text-gray-500 text-xs">模板加载中...</p>
                             </div>
+                            <div class="mt-1 text-xs text-gray-400">发送顺序按勾选顺序或后续支持的排序。</div>
+                        </div>
+                        <div id="selected-template-url-container" class="mt-1 md:mt-2 p-1.5 md:p-2 bg-[#1a1d24] rounded border border-gray-700/50 hidden">
+                           <div class="flex justify-between items-center">
+                                <p id="selected-template-url-display" class="text-xs md:text-sm text-gray-400 truncate"></p>
+                                <button id="toggle-url-visibility-btn" class="ml-2 text-gray-500 hover:text-white">
+                                    </button>
+                           </div>
                         </div>
                         <div id="phone-number-section" class="mb-2 md:mb-3 flex-shrink-0">
                             <label for="phone-number-input" id="recipient-label" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">手机号码/接收者:</label>
@@ -243,7 +241,7 @@
                         
                         <div class="editor-tabs-container flex border-b border-gray-700 mb-2 md:mb-3 flex-shrink-0 overflow-x-auto">
                             <button data-tab="body" class="editor-tab whitespace-nowrap">发送内容</button>
-                            <button data-tab="headers" class="editor-tab whitespace-nowrap">请求头</button>
+                            <button data-tab="headers" class="editor-tab whitespace-nowrap">特定请求头</button>
                             <button data-tab="schedule" class="editor-tab whitespace-nowrap">定时发送</button>
                             <button data-tab="history" class="editor-tab whitespace-nowrap">发送历史</button>
                         </div>
@@ -292,12 +290,22 @@
                                 <option value="workweixin">腾讯企业微信应用</option>
                             </select>
                         </div>
-                        <div id="template-is-global-container" class="mb-2 md:mb-3 flex-shrink-0 hidden">
-                            <label for="template-is-global-checkbox" class="flex items-center text-xs md:text-sm font-medium text-gray-300 cursor-pointer">
-                                <input type="checkbox" id="template-is-global-checkbox" class="mr-2 h-3.5 w-3.5 md:h-4 md:w-4 rounded border-gray-500 text-teal-600 focus:ring-teal-500 bg-[#2f3241]">
-                                设为全局模板 (所有用户可用)
-                            </label>
+
+                        <div id="template-access-control-container" class="hidden space-y-2 md:space-y-3 mb-2 md:mb-3 flex-shrink-0">
+                            <div>
+                                <label for="template-is-global-checkbox" class="flex items-center text-xs md:text-sm font-medium text-gray-300 cursor-pointer">
+                                    <input type="checkbox" id="template-is-global-checkbox" class="mr-2 h-3.5 w-3.5 md:h-4 md:w-4 rounded border-gray-500 text-teal-600 focus:ring-teal-500 bg-[#2f3241]">
+                                    设为全局模板 (所有用户可用)
+                                </label>
+                            </div>
+                            <div id="template-allowed-users-container" class="hidden">
+                                <label class="block text-xs md:text-sm font-medium text-gray-300 mb-1">授权给特定用户 (若非全局):</label>
+                                <ul id="template-allowed-users-list" class="max-h-32 overflow-y-auto bg-[#1a1d24] border border-gray-600 rounded p-2 space-y-1">
+                                    <p class="text-gray-500 text-xs">加载用户列表中...</p>
+                                </ul>
+                            </div>
                         </div>
+                        
                         <div id="workweixin-fields-container" class="hidden space-y-2 md:space-y-3 mb-2 md:mb-3 flex-shrink-0">
                             <div>
                                 <label for="workweixin-corpid-input" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">企业ID (CorpID):</label>
@@ -388,10 +396,11 @@
                         <p class="text-xs md:text-sm mb-1 md:mb-2">Webhook Sender 是一款帮助您轻松管理和发送 Webhook 消息的 Web 应用。</p>
                         <ul class="list-disc list-inside text-xs md:text-sm space-y-1 pl-2 md:pl-4">
                             <li>通过“地址模板”可以预设常用的 Webhook URL 和请求体结构 (通用类型)，或配置企业微信应用信息 (仅管理员)。</li>
-                            <li>管理员可以将模板设置为“全局”，供所有用户在创建“发送配置”时选用。</li>
+                            <li>管理员可以将模板设置为“全局”，或授权给特定用户。</li>
+                            <li>“发送配置”可以选择一个或多个地址模板进行顺序发送。</li>
                             <li>通用模板支持使用 <code>{phoneNumber}</code> 和 <code>{userMessage}</code> 占位符。</li>
                             <li>企业微信模板需要配置 CorpID, CorpSecret (将加密存储), AgentID 和消息类型。</li>
-                            <li>在“发送配置”中，您可以选择一个地址模板，并填写具体的消息内容和接收者信息。</li>
+                            <li>在“发送配置”中，您可以选择模板，并填写具体的消息内容和接收者信息。</li>
                             <li>支持立即发送，也支持设置“定时发送”任务。</li>
                             <li>每个发送配置都有独立的“发送历史”记录。</li>
                             <li>管理员可以进行用户管理操作。</li>
@@ -424,7 +433,28 @@
                 <p id="dialog-message" class="text-sm text-gray-300">这是对话框消息。</p>
             </div>
             <div id="dialog-buttons" class="p-4 bg-[#23272e] rounded-b-lg flex justify-end space-x-3">
-                <!-- Buttons will be populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-change-password-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+        <div class="bg-[#23272e] rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <div class="p-4 border-b border-gray-700">
+                <h2 class="text-lg font-semibold text-gray-100">为用户 <span id="admin-target-username" class="text-indigo-400"></span> 修改密码</h2>
+            </div>
+            <form id="admin-change-password-form" class="p-6 space-y-4">
+                <div>
+                    <label for="admin-new-password" class="block text-sm font-medium text-gray-300 mb-1">新密码:</label>
+                    <input type="password" id="admin-new-password" class="w-full bg-[#1e2128] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" required>
+                </div>
+                <div>
+                    <label for="admin-confirm-new-password" class="block text-sm font-medium text-gray-300 mb-1">确认新密码:</label>
+                    <input type="password" id="admin-confirm-new-password" class="w-full bg-[#1e2128] border border-gray-600 rounded px-3 py-2 text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" required>
+                </div>
+            </form>
+            <div class="p-4 bg-[#1e2128] rounded-b-lg flex justify-end space-x-3 border-t border-gray-700">
+                 <button type="button" id="admin-cancel-change-password-btn" class="btn btn-gray">取消</button>
+                 <button type="submit" id="admin-submit-change-password-btn" form="admin-change-password-form" class="btn btn-primary">确认修改</button>
             </div>
         </div>
     </div>

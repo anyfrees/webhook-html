@@ -2,122 +2,137 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <link rel="icon" type="image/svg+xml" href="/icon.ico"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - Webhook Sender</title>
     <link rel="stylesheet" href="/assets/css/output.css">
     <style>
         body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #171a21; /* 与主应用背景色一致 */
-            color: #e5e7eb; /* Tailwind gray-200 */
-            font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+            background-color: #1a1d24; /* 深色背景 */
         }
         .login-container {
-            background-color: #1e2128; /* 深色背景 */
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .login-card {
+            background-color: #2d3748; /* 卡片背景色 */
+            color: #e2e8f0; /* 文本颜色 */
             padding: 2rem;
             border-radius: 0.5rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             width: 100%;
-            max-width: 400px;
+            max-width: 28rem; /* 限制最大宽度 */
         }
         .login-title {
+            font-size: 1.875rem; /* 对应 Tailwind text-3xl */
+            font-weight: 700; /* 对应 Tailwind font-bold */
             text-align: center;
-            font-size: 1.875rem; /* text-3xl */
-            font-weight: 600; /* font-semibold */
-            margin-bottom: 1.5rem;
-            color: #f3f4f6; /* Tailwind gray-100 */
-        }
-        .form-group {
-            margin-bottom: 1.25rem;
+            margin-bottom: 1.5rem; /* 对应 Tailwind mb-6 */
+            color: #cbd5e0;
         }
         .form-label {
             display: block;
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem; /* text-sm */
-            font-weight: 500; /* font-medium */
-            color: #d1d5db; /* Tailwind gray-300 */
+            margin-bottom: 0.5rem; /* 对应 Tailwind mb-2 */
+            font-size: 0.875rem; /* 对应 Tailwind text-sm */
+            font-weight: 500; /* 对应 Tailwind font-medium */
+            color: #a0aec0; /* 标签颜色 */
         }
         .form-input {
             width: 100%;
-            padding: 0.75rem 1rem;
-            background-color: #2f3241; /* 更深的输入框背景 */
-            border: 1px solid #4b5563; /* Tailwind gray-600 */
-            border-radius: 0.375rem; /* rounded-md */
-            color: #e5e7eb;
-            font-size: 0.875rem;
-            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+            padding: 0.75rem 1rem; /* 对应 Tailwind px-4 py-3 */
+            background-color: #1a202c; /* 输入框背景 */
+            border: 1px solid #4a5568; /* 输入框边框 */
+            border-radius: 0.375rem; /* 对应 Tailwind rounded-md */
+            color: #e2e8f0; /* 输入文本颜色 */
+            outline: none;
         }
         .form-input:focus {
-            outline: none;
-            border-color: #6366f1; /* Tailwind indigo-500 */
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5);
+            border-color: #4299e1; /* 对应 Tailwind focus:border-blue-500 */
+            box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.5); /* 对应 Tailwind focus:ring-blue-500/50 */
         }
-        .btn-login {
+        .password-container {
+            position: relative;
+        }
+        .toggle-password {
+            position: absolute;
+            top: 50%;
+            right: 0.75rem; /* 对应 Tailwind right-3 */
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #a0aec0; /* 切换按钮颜色 */
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        .btn-primary {
             width: 100%;
-            padding: 0.75rem 1rem;
-            background-color: #4f46e5; /* Tailwind indigo-600 */
+            padding: 0.75rem;
+            background-color: #4a5568; /* 按钮背景 */
             color: white;
-            font-weight: 600;
+            font-weight: 600; /* 对应 Tailwind font-semibold */
             border-radius: 0.375rem;
             border: none;
             cursor: pointer;
-            transition: background-color 0.15s ease-in-out;
+            transition: background-color 0.2s;
         }
-        .btn-login:hover {
-            background-color: #4338ca; /* Tailwind indigo-700 */
+        .btn-primary:hover {
+            background-color: #2c3748; /* 按钮悬停背景 */
         }
-        .error-message {
-            background-color: rgba(239, 68, 68, 0.1); /* bg-red-500/10 */
-            color: #f87171; /* Tailwind red-400 */
-            padding: 0.75rem 1rem;
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            border-radius: 0.375rem;
-            margin-top: 1rem;
-            font-size: 0.875rem;
+        .btn-primary:disabled {
+            background-color: #2d3748;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        #errorMessage.hidden {
+            display: none;
+        }
+        #errorMessage { /* 确保错误消息可见且有样式 */
+            color: #fc8181; /* red-500 */
+            background-color: rgba(252, 129, 129, 0.1); /* red-100 with opacity */
+            border: 1px solid rgba(252, 129, 129, 0.4); /* red-400 with opacity */
+            border-radius: 0.25rem; /* rounded */
+            padding: 0.75rem; /* p-3 */
+            margin-top: 0.5rem; /* mt-2 */
+            margin-bottom: 1rem; /* mb-4 */
+            font-size: 0.875rem; /* text-sm */
             text-align: center;
-        }
-        .register-link-container {
-            text-align: center;
-            margin-top: 1.5rem;
-            font-size: 0.875rem;
-            color: #9ca3af; /* Tailwind gray-400 */
-        }
-        .register-link-container a {
-            color: #818cf8; /* Tailwind indigo-400 */
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .register-link-container a:hover {
-            text-decoration: underline;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <h1 class="login-title">Webhook Sender 登录</h1>
-        <form id="loginForm">
-            <div class="form-group">
-                <label for="username" class="form-label">用户名</label>
-                <input type="text" id="username" name="username" class="form-input" required autocomplete="username">
-            </div>
-            <div class="form-group">
-                <label for="password" class="form-label">密码</label>
-                <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
-            </div>
-            <button type="submit" class="btn-login">登录</button>
-        </form>
-        <div id="errorMessage" class="error-message" style="display: none;"></div>
-        <!--
-        <div class="register-link-container">
-            还没有账户？ <a href="/register.html">立即注册</a>
-        </div>
-        -->
-    </div>
+        <div class="login-card">
+            <h1 class="login-title">Webhook Sender 登录</h1>
+            
+            <div id="errorMessage" class="hidden">
+                </div>
 
-    <script src="/assets/js/login.js"></script>
+            <form id="loginForm">
+                <div class="mb-4">
+                    <label for="username" class="form-label">用户名:</label>
+                    <input type="text" id="username" name="username" class="form-input" required autocomplete="username">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="form-label">密码:</label>
+                    <div class="password-container">
+                        <input type="password" id="password" name="password" class="form-input" required autocomplete="current-password">
+                        <button type="button" id="togglePassword" class="toggle-password">显示</button>
+                    </div>
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary">登录</button>
+                </div>
+            </form>
+            <div class="mt-4 text-center text-xs text-gray-400">
+                
+                <p class="mt-1">此系统不允许自助注册，请联系管理员添加账户。</p>
+                 
+            </div>
+        </div>
+    </div>
+    <script type="module" src="/assets/js/login.js"></script>
 </body>
 </html>

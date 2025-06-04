@@ -6,51 +6,37 @@ const storageService = require('../services/storageService'); // 数据持久化
 const webhookService = require('../services/webhookService'); // 处理 Webhook 发送逻辑
 const taskService = require('../services/taskService');       // 处理定时任务逻辑
 const authMiddleware = require('../middleware/authMiddleware'); // 通用认证中间件
-const { body, validationResult } = require('express-validator'); // 用于输入验证
+const { body, param, validationResult } = require('express-validator'); // 用于输入验证
 const bcrypt = require('bcryptjs'); // 用于管理员创建用户时哈希密码
-const fs = require('fs').promises; // 用于管理员删除用户时直接操作文件 (简化实现)
-const path = require('path'); // 用于管理员删除用户时直接操作文件 (简化实现)
-// 注意：cryptoService 中的 encryptText, decryptText 通常在各自的服务模块内部使用，
-// apiRoutes.js 本身一般不直接调用它们，除非有特殊情况。
-// const { encryptText, decryptText } = require('../services/cryptoService');
+const fs = require('fs').promises; 
+const path = require('path'); 
 
-// DATA_DIR 用于辅助删除用户数据时的文件路径拼接
 const DATA_DIR = path.resolve(__dirname, '..', '..', 'data');
-const HISTORY_DIR = path.join(DATA_DIR, 'history'); // 定义 HISTORY_DIR
+const HISTORY_DIR = path.join(DATA_DIR, 'history'); 
 
 const router = express.Router();
 
-// 应用通用认证中间件到此路由文件下的所有路由
 router.use(authMiddleware);
 
-/**
- * 中间件：检查用户是否为管理员
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
- */
 function isAdmin(req, res, next) {
     if (req.user && req.user.role === 'admin') {
-        next(); // 用户是管理员，继续
+        next(); 
     } else {
         res.status(403).json({ message: '权限不足: 此操作需要管理员权限。', error: 'Forbidden' });
     }
 }
 
-// --- 健康检查/心跳路由 (所有登录用户可访问) ---
 router.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'API is healthy and authenticated.', user: req.user });
 });
 
-// --- 获取所有与当前用户相关的数据 ---
 router.get('/data', async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const userRole = req.user.role;
         console.log(`[API /data] 用户 ${userId} (角色: ${userRole}) 请求数据。`);
 
-        const webhooks = await storageService.getWebhooks(userId);
-        // storageService.getAccessibleTemplatesForUserDisplay 会根据角色返回合适的模板列表
+        const webhooks = await storageService.getWebhooks(userId); 
         const templates = await storageService.getAccessibleTemplatesForUserDisplay(userId, userRole);
         const scheduledTasks = await storageService.getScheduledTasks(userId);
         
@@ -68,7 +54,7 @@ router.get('/data', async (req, res, next) => {
             webhookUrlTemplates: templates,
             history,
             scheduledTasks,
-            currentUser: { // 确保 currentUser 信息与 /api/auth/me 一致
+            currentUser: { 
                 id: req.user.userId,
                 username: req.user.username,
                 role: userRole,
@@ -77,11 +63,10 @@ router.get('/data', async (req, res, next) => {
         });
     } catch (error) {
         console.error("[API /data] 获取数据错误:", error);
-        next(error); // 交给全局错误处理器
+        next(error); 
     }
 });
 
-// --- Webhook 配置管理 (所有登录用户可管理自己的) ---
 router.post('/webhooks', async (req, res, next) => {
     try {
         const userId = req.user.userId;
@@ -89,14 +74,19 @@ router.post('/webhooks', async (req, res, next) => {
         if (!Array.isArray(webhooksToSave)) {
             return res.status(400).json({ message: '请求体必须是一个 Webhook 配置数组' });
         }
-        // 确保所有 webhooks 都关联到当前用户，并分配ID（如果新建）
-        const validatedWebhooks = webhooksToSave.map(wh => ({
-            ...wh,
-            id: wh.id || uuidv4(), // 如果没有ID，则认为是新建，分配一个
-            userId: userId,        // 强制设置为当前用户ID
-        }));
+        
+        const validatedWebhooks = webhooksToSave.map(wh => {
+            const newWh = {
+                ...wh,
+                id: wh.id || uuidv4(), 
+                userId: userId,
+            };
+            newWh.templateIds = Array.isArray(wh.templateIds) ? wh.templateIds : (wh.templateId ? [wh.templateId] : []);
+            delete newWh.templateId; 
+            return newWh;
+        });
         await storageService.saveWebhooks(validatedWebhooks, userId);
-        const updatedWebhooks = await storageService.getWebhooks(userId); // 返回更新后的列表
+        const updatedWebhooks = await storageService.getWebhooks(userId); 
         res.json({ success: true, message: 'Webhook 配置已保存', webhooks: updatedWebhooks });
     } catch (error) {
         console.error("[API /webhooks] 保存 Webhook 配置错误:", error);
@@ -104,11 +94,9 @@ router.post('/webhooks', async (req, res, next) => {
     }
 });
 
-// --- 地址模板管理 (只有管理员可以管理) ---
 router.get('/templates', isAdmin, async (req, res, next) => {
     try {
         const adminUserId = req.user.userId;
-        // 管理员获取的是自己创建的 + 所有全局的模板
         const templates = await storageService.getAccessibleTemplatesForUserDisplay(adminUserId, 'admin');
         res.json(templates);
     } catch (error) {
@@ -120,41 +108,34 @@ router.get('/templates', isAdmin, async (req, res, next) => {
 router.post('/templates', isAdmin, async (req, res, next) => {
     try {
         const adminUserId = req.user.userId;
-        const templatesToSaveFromClient = req.body; // 客户端应发送完整的模板列表
+        const templatesToSaveFromClient = req.body; 
         
         if (!Array.isArray(templatesToSaveFromClient)) {
             return res.status(400).json({ message: '请求体必须是一个模板数组' });
         }
 
-        // storageService.saveTemplates 负责处理加密和ID分配
         await storageService.saveTemplates(templatesToSaveFromClient, adminUserId);
-        
-        // 返回更新后的、对管理员可见的模板列表
         const updatedTemplates = await storageService.getAccessibleTemplatesForUserDisplay(adminUserId, 'admin');
-
-        // 尝试找到刚刚被新增或修改的模板，以便客户端可能需要其ID
+        
         let savedOrNewTemplateInfo = null;
         if (templatesToSaveFromClient.length > 0) {
-            // 启发式查找：如果客户端发送的模板中有一个没有ID，那它可能是新创建的
             const clientNewTemplate = templatesToSaveFromClient.find(t => !t.id);
             if (clientNewTemplate) {
                 savedOrNewTemplateInfo = updatedTemplates.find(
                     ut => ut.name === clientNewTemplate.name && 
                           ut.type === clientNewTemplate.type &&
-                          ut.isGlobal === !!clientNewTemplate.isGlobal // 比较isGlobal状态
+                          ut.isGlobal === !!clientNewTemplate.isGlobal 
                 );
             } else if (templatesToSaveFromClient.length === 1 && templatesToSaveFromClient[0].id) {
-                // 如果只发送了一个带ID的模板，那就是被修改的那个
                 savedOrNewTemplateInfo = updatedTemplates.find(ut => ut.id === templatesToSaveFromClient[0].id);
             }
         }
-
 
         res.json({
             success: true,
             message: '地址模板已保存',
             templates: updatedTemplates,
-            savedTemplate: savedOrNewTemplateInfo // 包含一个可能的被保存/新建的模板信息
+            savedTemplate: savedOrNewTemplateInfo 
         });
     } catch (error) {
         console.error("[API /templates (POST)] 保存模板错误:", error);
@@ -162,19 +143,16 @@ router.post('/templates', isAdmin, async (req, res, next) => {
     }
 });
 
-// --- 发送 Webhook (所有登录用户可发送自己的配置) ---
 router.post('/send-now', async (req, res, next) => {
     try {
         const userId = req.user.userId;
-        const userRole = req.user.role;
-        const webhookPayloadFromClient = req.body; // 包含 id, templateId, phone, plainBody, headers
+        const webhookPayloadFromClient = req.body; 
 
         if (!webhookPayloadFromClient || !webhookPayloadFromClient.id) {
             return res.status(400).json({ message: '无效的 Webhook 发送请求体: 缺少配置ID (id 字段)' });
         }
 
         const webhookConfigId = webhookPayloadFromClient.id;
-        // 1. 获取用户自己的 Webhook 配置原始数据
         const rawUserWebhooks = await storageService.getRawWebhooksForUser(userId);
         const webhookConfig = rawUserWebhooks.find(wh => wh.id === webhookConfigId);
 
@@ -182,25 +160,32 @@ router.post('/send-now', async (req, res, next) => {
             return res.status(404).json({ message: `发送失败：未找到您账户下 ID 为 ${webhookConfigId} 的 Webhook 配置。` });
         }
 
-        // 2. 获取模板 ID (优先使用客户端提供的，其次用配置中存的)
-        const templateIdToFetch = webhookPayloadFromClient.templateId || webhookConfig.templateId;
-        if (!templateIdToFetch) {
-             return res.status(400).json({ message: `发送失败：配置 "${webhookConfig.name}" 未指定地址模板。`});
-        }
+        const templateIdsToUse = webhookPayloadFromClient.templateIds && webhookPayloadFromClient.templateIds.length > 0 
+            ? webhookPayloadFromClient.templateIds 
+            : webhookConfig.templateIds;
 
-        // 3. 获取原始模板数据，并校验用户权限
-        // storageService.getRawTemplateByIdForUserAccess 会检查用户是否有权访问此模板
-        const rawTemplate = await storageService.getRawTemplateByIdForUserAccess(templateIdToFetch, userId, userRole);
-
-        if (!rawTemplate) {
-            return res.status(404).json({ message: `发送失败：配置 "${webhookConfig.name}" (ID: ${webhookConfigId}) 未关联有效或您可访问的模板 (模板ID: ${templateIdToFetch})。请检查模板是否存在或是否已设为全局。`});
+        if (!Array.isArray(templateIdsToUse) || templateIdsToUse.length === 0) {
+             return res.status(400).json({ message: `发送失败：配置 "${webhookConfig.name}" 未指定任何有效的地址模板。`});
         }
         
-        // 4. 调用 webhookService 发送 (传递原始配置和原始模板)
-        // webhookService.sendWebhookRequest 内部会使用 webhookConfig 和 rawTemplate 来构建最终请求
-        const resultEntry = await webhookService.sendWebhookRequest(webhookPayloadFromClient, userId, rawTemplate); // 注意：这里可能需要调整webhookService的参数
+        const servicePayload = {
+            ...webhookPayloadFromClient, 
+            templateIds: templateIdsToUse  
+        };
         
-        res.status(resultEntry.status === 'success' ? 200 : (resultEntry.error?.statusCode || resultEntry.error?.status || 500) ).json(resultEntry);
+        const resultEntry = await webhookService.sendWebhookRequest(servicePayload, userId, webhookConfig); 
+        
+        // Use overallHistoryEntry for status code decision from webhookService result
+        const overallStatus = resultEntry.status;
+        let httpStatusCode = 200; // Default to 200 for success or partial_success
+
+        if (overallStatus === 'failure') {
+            // If there's a specific error object with a statusCode (e.g., from operational errors), use it
+            httpStatusCode = resultEntry.error?.statusCode || 500;
+        }
+        
+        res.status(httpStatusCode).json(resultEntry);
+
     } catch (error) {
         console.error("[API /send-now] 立即发送错误:", error);
         const clientErrorMessage = error.isOperational ? error.message : '发送 Webhook 时发生内部错误';
@@ -209,22 +194,21 @@ router.post('/send-now', async (req, res, next) => {
     }
 });
 
-// --- 定时任务管理 (所有登录用户可管理自己的) ---
 router.post('/schedule-task', async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const userRole = req.user.role;
-        const taskDataFromClient = req.body; // 包含 originalWebhookId, scheduledTime, webhookSnapshot, templateType, 等
+        const taskDataFromClient = req.body; 
         
-        if (!taskDataFromClient || !taskDataFromClient.originalWebhookId || !taskDataFromClient.scheduledTime || !taskDataFromClient.webhookSnapshot || !taskDataFromClient.templateType) {
-            return res.status(400).json({ message: '无效的定时任务数据：缺少必要字段。' });
+        if (!taskDataFromClient || !taskDataFromClient.originalWebhookId || !taskDataFromClient.scheduledTime || 
+            !taskDataFromClient.webhookSnapshot || !Array.isArray(taskDataFromClient.webhookSnapshot.templateIds) || taskDataFromClient.webhookSnapshot.templateIds.length === 0) {
+            return res.status(400).json({ message: '无效的定时任务数据：缺少必要字段或templateIds。' });
         }
-
-        // taskService.scheduleNewTask 内部会根据 templateId (在 webhookSnapshot 中) 获取模板并校验权限
+        
         const result = await taskService.scheduleNewTask(taskDataFromClient, userId, userRole);
         
         if (result && result.success) {
-            const updatedTasks = await storageService.getScheduledTasks(userId); // 获取更新后的任务列表
+            const updatedTasks = await storageService.getScheduledTasks(userId); 
             res.status(201).json({ success: true, message: '定时任务已创建', taskId: result.taskId, scheduledTasks: updatedTasks });
         } else {
             res.status(400).json({ success: false, message: result ? result.msg : "创建定时任务失败" });
@@ -239,7 +223,6 @@ router.delete('/schedule-task/:taskId', async (req, res, next) => {
     try {
         const userId = req.user.userId;
         const { taskId } = req.params;
-        // taskService.cancelScheduledTask 内部应验证任务是否属于该用户
         const result = await taskService.cancelScheduledTask(taskId, userId);
         if (result && result.success) {
             const updatedTasks = await storageService.getScheduledTasks(userId);
@@ -253,7 +236,6 @@ router.delete('/schedule-task/:taskId', async (req, res, next) => {
     }
 });
 
-// --- 获取 UUID (所有登录用户可访问) ---
 router.get('/uuid', (req, res) => {
     res.json({ uuid: uuidv4() });
 });
@@ -261,8 +243,28 @@ router.get('/uuid', (req, res) => {
 // --- 用户管理 API (仅限管理员) ---
 router.get('/users', isAdmin, async (req, res, next) => {
     try {
-        const users = await storageService.getUsers(); // getUsers 返回不含密码的用户信息
-        res.json(users);
+        const users = await storageService.getUsers(); // This already excludes password and sensitive login data
+        // To show lockout status to admin, we need to fetch with sensitive data but then filter for display
+        const allUsersFullData = await Promise.all(
+            users.map(u => storageService.findUserById(u.id, true)) // true to include all data
+        );
+        const usersForAdminDisplay = allUsersFullData.map(user => {
+            if (!user) return null; // Should not happen if getUsers worked
+            // Admin needs to see lockout status
+            return {
+                id: user.id,
+                username: user.username,
+                role: user.role,
+                mustChangePassword: !!user.mustChangePassword,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
+                failedLoginAttempts: user.failedLoginAttempts,
+                lockoutUntil: user.lockoutUntil,
+                lockoutLevel: user.lockoutLevel
+            };
+        }).filter(Boolean);
+
+        res.json(usersForAdminDisplay);
     } catch (error) {
         console.error("[API /users (GET)] 获取用户列表错误:", error);
         next(error);
@@ -289,9 +291,9 @@ router.post('/users', isAdmin, [
             username,
             password: hashedPassword,
             role: role || 'user',
-            mustChangePassword: true // 新用户由管理员创建，首次登录强制修改密码
+            mustChangePassword: true 
         };
-        const createdUser = await storageService.createUser(newUserInput); // createUser 返回不含密码的用户信息
+        const createdUser = await storageService.createUser(newUserInput); 
         res.status(201).json({ success: true, message: '用户创建成功。', user: createdUser });
     } catch (error) {
         console.error("[API /users (POST)] 创建用户错误:", error);
@@ -299,7 +301,47 @@ router.post('/users', isAdmin, [
     }
 });
 
-// 辅助函数，仅用于此文件简化用户删除操作时读取原始用户数据，实际应在 storageService 中有更完善的删除机制
+// 新增：管理员手动解锁用户路由
+router.post('/users/:userId/unlock', isAdmin, [
+    param('userId').isUUID().withMessage('用户ID格式无效。')
+], async (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(400).json({ message: '输入验证失败。', errors: errors.array() });
+    }
+    try {
+        const targetUserId = req.params.userId;
+        const adminUsername = req.user.username;
+
+        const targetUser = await storageService.findUserById(targetUserId, true); // true to get all fields
+        if (!targetUser) {
+            return res.status(404).json({ message: '目标用户未找到。' });
+        }
+
+        if (targetUser.username === 'admin' && targetUser.id !== req.user.userId) {
+             // Allowing admin to unlock the primary 'admin' account if needed, but log carefully.
+             console.warn(`[API /users/:userId/unlock] 管理员 '${adminUsername}' 正在解锁系统 'admin' 用户 (ID: ${targetUserId})。`);
+        } else if (targetUser.id === req.user.userId) {
+            return res.status(400).json({ message: '管理员不能通过此接口解锁自己 (通常也不应被锁定)。' });
+        }
+        
+        const updates = {
+            failedLoginAttempts: 0,
+            lockoutUntil: null,
+            lockoutLevel: 0
+        };
+
+        await storageService.updateUser(targetUserId, updates);
+        console.log(`[API /users/:userId/unlock] 管理员 '${adminUsername}' (ID: ${req.user.userId}) 已手动解锁用户 '${targetUser.username}' (ID: ${targetUserId})。`);
+        res.json({ success: true, message: `用户 ${targetUser.username} 已成功解锁。` });
+
+    } catch (error) {
+        console.error(`[API /users/:userId/unlock] 管理员解锁用户 (ID: ${req.params.userId}) 失败:`, error);
+        next(error);
+    }
+});
+
+
 async function readFileDataInternal(filePath, defaultValue = []) {
     try {
         const fileContent = await fs.readFile(filePath, 'utf-8');
@@ -308,7 +350,7 @@ async function readFileDataInternal(filePath, defaultValue = []) {
     } catch (error) {
         if (error.code === 'ENOENT') { return defaultValue; }
         console.error(`[apiRoutes - readFileDataInternal] 读取文件 '${filePath}' 失败:`, error);
-        throw error; // 或者返回defaultValue并记录更严重的错误
+        throw error; 
     }
 }
 async function writeFileDataInternal(filePath, data) {
@@ -327,7 +369,7 @@ async function writeFileDataInternal(filePath, data) {
 router.delete('/users/:userId', isAdmin, async (req, res, next) => {
     try {
         const userIdToDelete = req.params.userId;
-        const adminUserId = req.user.userId; // 当前操作的管理员ID
+        const adminUserId = req.user.userId; 
 
         if (userIdToDelete === adminUserId) {
             return res.status(400).json({ message: '管理员不能删除自己。' });
@@ -339,18 +381,14 @@ router.delete('/users/:userId', isAdmin, async (req, res, next) => {
         if (!userToDeleteData) {
             return res.status(404).json({ message: '未找到要删除的用户。' });
         }
-        // 进一步保护，例如不允许删除名为 'admin' 的用户，如果它是系统初始管理员
         if (userToDeleteData.username === 'admin') {
-             // 可以增加更复杂的判断，比如检查是否是系统中唯一的管理员等
-             return res.status(403).json({ message: '不能删除名为 "admin" 的管理员账户。'});
+             return res.status(403).json({ message: '不能删除名为 "admin" 的系统管理员账户。'});
         }
 
-        // 1. 删除用户记录
         const remainingUsersWithPasswords = allUsersWithPasswords.filter(u => u.id !== userIdToDelete);
         await writeFileDataInternal(path.join(DATA_DIR, 'users.json'), remainingUsersWithPasswords);
         console.log(`[API /users/:userId DELETE] 用户 ${userToDeleteData.username} (ID: ${userIdToDelete}) 已从 users.json 删除。`);
 
-        // 2. 删除该用户的 Webhook 配置
         const allWebhooks = await readFileDataInternal(path.join(DATA_DIR, 'webhooks.json'), []);
         const remainingWebhooks = allWebhooks.filter(wh => wh.userId !== userIdToDelete);
         if (allWebhooks.length !== remainingWebhooks.length) {
@@ -358,31 +396,31 @@ router.delete('/users/:userId', isAdmin, async (req, res, next) => {
             console.log(`[API /users/:userId DELETE] 用户 ${userIdToDelete} 的 Webhook 配置已删除。`);
         }
         
-        // 3. 删除该用户创建的模板 (如果模板是用户私有的，全局模板通常不应删除)
-        // 注意：如果一个模板是全局的，但创建者是此用户，是否删除？当前逻辑是删除。
-        // 如果希望保留全局模板，即使创建者被删除，这里的逻辑需要调整。
         const allTemplates = await readFileDataInternal(path.join(DATA_DIR, 'templates.json'), []);
-        const remainingTemplates = allTemplates.filter(t => t.userId !== userIdToDelete);
-        if (allTemplates.length !== remainingTemplates.length) {
+        const remainingTemplates = allTemplates.filter(t => {
+            if (t.userId === userIdToDelete && !t.isGlobal) return false;
+            if (t.allowedUserIds && t.allowedUserIds.includes(userIdToDelete)) {
+                t.allowedUserIds = t.allowedUserIds.filter(id => id !== userIdToDelete);
+            }
+            return true;
+        });
+        if (allTemplates.length !== remainingTemplates.length || JSON.stringify(allTemplates) !== JSON.stringify(remainingTemplates)) {
             await writeFileDataInternal(path.join(DATA_DIR, 'templates.json'), remainingTemplates);
-            console.log(`[API /users/:userId DELETE] 用户 ${userIdToDelete} 创建的模板已删除。`);
+            console.log(`[API /users/:userId DELETE] 用户 ${userIdToDelete} 创建的模板已删除或其授权已从其他模板移除。`);
         }
 
-        // 4. 删除该用户的定时任务
+
         const allTasks = await readFileDataInternal(path.join(DATA_DIR, 'scheduledTasks.json'), []);
         const remainingTasks = allTasks.filter(t => t.userId !== userIdToDelete);
         if (allTasks.length !== remainingTasks.length) {
             await writeFileDataInternal(path.join(DATA_DIR, 'scheduledTasks.json'), remainingTasks);
             console.log(`[API /users/:userId DELETE] 用户 ${userIdToDelete} 的定时任务已删除。`);
-            // 也需要通知 taskService 取消这些任务的内存调度
             const tasksToDelete = allTasks.filter(t => t.userId === userIdToDelete);
             for (const task of tasksToDelete) {
-                await taskService.cancelScheduledTask(task.id, userIdToDelete, true); // true表示强制取消，不校验操作者
+                await taskService.cancelScheduledTask(task.id, userIdToDelete, true); 
             }
         }
 
-        // 5. 删除该用户的发送历史文件
-        // 需要知道该用户有哪些webhook ID
         const userWebhooksBeforeDeletion = allWebhooks.filter(wh => wh.userId === userIdToDelete);
         for (const wh of userWebhooksBeforeDeletion) {
             const historyFilePath = path.join(HISTORY_DIR, `history_${userIdToDelete}_${wh.id}.json`);
@@ -390,7 +428,7 @@ router.delete('/users/:userId', isAdmin, async (req, res, next) => {
                 await fs.unlink(historyFilePath);
                 console.log(`[API /users/:userId DELETE] 已删除历史文件: ${historyFilePath}`);
             } catch (err) {
-                if (err.code !== 'ENOENT') { // ENOENT 表示文件本就不存在，可以忽略
+                if (err.code !== 'ENOENT') { 
                     console.error(`[API /users/:userId DELETE] 删除历史文件 ${historyFilePath} 失败:`, err);
                 }
             }

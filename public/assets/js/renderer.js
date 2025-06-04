@@ -9,10 +9,10 @@ let currentUser = null; // { id, username, role, mustChangePassword }
 
 let currentView = 'sender'; // 'sender' or 'templates' or 'user-management'
 let selectedWebhookId = null;
-let selectedTemplateId = null;
+let selectedTemplateId = null; // For template editor view
 let isSending = false;
 let currentActiveTab = 'body'; // 'body', 'headers', 'schedule', 'history'
-let usersList = []; // For admin user management
+let usersList = []; 
 
 // --- DOM 元素引用 ---
 const userInfoSpan = document.getElementById('userInfo');
@@ -50,7 +50,7 @@ const newWebhookBtn = document.getElementById('new-webhook-btn');
 const webhookEditorEl = document.getElementById('webhook-editor');
 const webhookNameInput = document.getElementById('webhook-name');
 const sendNowBtn = document.getElementById('send-now-btn');
-const templateSelect = document.getElementById('template-select');
+const multiTemplateSelectorContainer = document.getElementById('multi-template-selector'); 
 const selectedTemplateUrlContainer = document.getElementById('selected-template-url-container');
 const phoneNumberInput = document.getElementById('phone-number-input');
 const phoneNumberSection = document.getElementById('phone-number-section');
@@ -88,8 +88,23 @@ const templateHeadersListEl = document.getElementById('template-headers-list');
 const addTemplateHeaderBtnInTemplates = document.querySelector('#template-editor button#add-template-header-btn');
 const templateBodyInput = document.getElementById('template-body-input');
 
+const templateAccessControlContainer = document.getElementById('template-access-control-container');
+const templateIsGlobalCheckbox = document.getElementById('template-is-global-checkbox'); 
+const templateAllowedUsersContainer = document.getElementById('template-allowed-users-container');
+const templateAllowedUsersList = document.getElementById('template-allowed-users-list');
+
+
 const closeAboutViewBtn = document.getElementById('close-about-view-btn');
 const refreshScheduledTasksBtn = document.getElementById('refreshScheduledTasksBtn');
+
+const adminChangePasswordModal = document.getElementById('admin-change-password-modal');
+const adminChangePasswordForm = document.getElementById('admin-change-password-form');
+const adminTargetUsernameSpan = document.getElementById('admin-target-username');
+const adminNewPasswordInput = document.getElementById('admin-new-password');
+const adminConfirmNewPasswordInput = document.getElementById('admin-confirm-new-password');
+const adminCancelChangePasswordBtn = document.getElementById('admin-cancel-change-password-btn');
+const adminSubmitChangePasswordBtn = document.getElementById('admin-submit-change-password-btn');
+let currentEditingUserIdForPasswordChange = null;
 
 
 const eyeIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>`;
@@ -99,11 +114,11 @@ const eyeSlashIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5"
 async function apiRequest(url, options = {}) {
     console.log(`[apiRequest] 请求URL: ${url}, 方法: ${options.method || 'GET'}`);
     const defaultHeaders = {};
-    if (!(options.body instanceof FormData)) {
+    if (!(options.body instanceof FormData)) { 
         defaultHeaders['Content-Type'] = 'application/json';
     }
     options.headers = { ...defaultHeaders, ...options.headers };
-    options.credentials = 'include';
+    options.credentials = 'include'; 
 
     try {
         const response = await fetch(url, options);
@@ -112,29 +127,29 @@ async function apiRequest(url, options = {}) {
 
         if (response.status === 401) {
             console.warn(`[apiRequest] 401 未授权，URL: ${url}. 重定向到登录页.`);
-            currentUser = null;
-            if (userInfoSpan) userInfoSpan.textContent = '';
+            currentUser = null; 
+            if (userInfoSpan) userInfoSpan.textContent = ''; 
             sessionStorage.setItem('redirectTo', window.location.pathname + window.location.search);
-            window.location.href = '/login.html?reason=session_expired';
+            window.location.href = '/login.html?reason=session_expired'; 
             throw new Error('会话已过期或未授权，请重新登录。');
         }
 
         if (response.ok && contentType && contentType.includes("application/octet-stream")) {
             console.log(`[apiRequest] 文件下载响应，URL: ${url}.`);
-            return response;
+            return response; 
         }
 
         let bodyText = '';
         try {
             bodyText = await response.text();
             if (contentType && contentType.includes("application/json")) {
-                responseData = JSON.parse(bodyText);
+                responseData = JSON.parse(bodyText); 
             } else {
                 responseData = { message: bodyText || `服务器返回状态 ${response.status} 但响应体为空。` };
             }
         } catch (e) {
             console.error("[apiRequest] 解析响应体时出错:", e, "原始文本:", bodyText, "响应状态:", response.status);
-            if (!response.ok) {
+            if (!response.ok) { 
                 const error = new Error(`HTTP 错误 ${response.status}: ${response.statusText || '无法解析错误响应体'}`);
                 error.status = response.status;
                 error.data = { message: bodyText || `服务器返回状态 ${response.status} 但响应体解析失败。` };
@@ -150,13 +165,13 @@ async function apiRequest(url, options = {}) {
 
             if (response.status === 403 && responseData && responseData.error === 'PasswordChangeRequired') {
                 console.warn('[apiRequest] 需要修改密码，重定向到修改密码页面。');
-                sessionStorage.setItem('forcePasswordChange', 'true');
+                sessionStorage.setItem('forcePasswordChange', 'true'); 
                 window.location.href = '/change-password.html';
-                throw new Error(responseData.message || '需要修改密码。');
+                throw new Error(responseData.message || '需要修改密码。'); 
             }
 
             const error = new Error(errorMessage);
-            error.data = responseData;
+            error.data = responseData; 
             error.status = response.status;
             throw error;
         }
@@ -165,14 +180,13 @@ async function apiRequest(url, options = {}) {
     } catch (error) {
         console.error(`[apiRequest] CATCH块，URL: ${url}. 错误:`, error, "选项:", options);
         if (error.message.includes('会话已过期') || error.message.includes('需要修改密码')) {
-            // Redirection already handled or will be handled by caller
         } else {
              const displayError = new Error(error.data?.message || error.message || '请求时发生未知网络或客户端错误。');
-             displayError.data = error.data;
-             displayError.status = error.status;
-             throw displayError;
+             displayError.data = error.data; 
+             displayError.status = error.status; 
+             throw displayError; 
         }
-        throw error;
+        throw error; 
     }
 }
 
@@ -186,6 +200,7 @@ function formatDate(isoString) {
         return '日期无效';
     }
 }
+
 function getDisplayableUrl(url, isWorkWeixin = false) {
     if (isWorkWeixin) {
         return { text: "企业微信接口 (自动处理)", title: "企业微信接口 (自动处理)" };
@@ -193,15 +208,15 @@ function getDisplayableUrl(url, isWorkWeixin = false) {
     if (!url || typeof url !== 'string' || url.trim() === '') return { text: 'URL未设置', title: 'URL未设置' };
     try {
         if (url.includes("/... (已保存)") || url.includes("... (格式可能无效)")) {
-             return { text: url, title: url };
+             return { text: url, title: url }; 
         }
-        const urlObj = new URL(url);
+        const urlObj = new URL(url); 
         if (urlObj.search || urlObj.pathname.length > 15 || url.length > 60) {
             const masked = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname.substring(0,15)}... (已保存)`;
-            return { text: masked, title: url };
+            return { text: masked, title: url }; 
         }
-        return { text: url, title: url };
-    } catch (e) {
+        return { text: url, title: url }; 
+    } catch (e) { 
         const attemptHttp = !url.startsWith('http://') && !url.startsWith('https://') ? `http://${url}` : null;
         if (attemptHttp) {
             try {
@@ -210,16 +225,34 @@ function getDisplayableUrl(url, isWorkWeixin = false) {
                     const masked = `${urlObj.protocol}//${urlObj.host}${urlObj.pathname.substring(0,15)}... (格式可能无效)`;
                     return { text: masked, title: url };
                 }
-                return { text: url, title: url };
-            } catch (e2) { /* fallback */ }
+                return { text: url, title: url }; 
+            } catch (e2) { /* 仍然解析失败，则按原始字符串长度处理 */ }
         }
         if (url.length > 60) {
             const masked = url.substring(0, 30) + '... (格式可能无效)';
             return { text: masked, title: url };
         }
-        return { text: url, title: url };
+        return { text: url, title: url }; 
     }
 }
+
+/**
+ * 检查通用模板是否明确需要电话号码占位符 (用于二次确认逻辑)。
+ * @param {Object} template - 模板对象。
+ * @returns {boolean}
+ */
+function isPhoneNumberRequiredForConfirmation(template) {
+    if (!template) return false;
+    if (template.type === 'generic') {
+        const placeholder1 = "{phoneNumber}";
+        const placeholder2 = "{phone}";
+        const urlRequires = (template.url && (template.url.includes(placeholder1) || template.url.includes(placeholder2)));
+        const bodyRequires = (template.bodyTemplate && (template.bodyTemplate.includes(placeholder1) || template.bodyTemplate.includes(placeholder2)));
+        return urlRequires || bodyRequires;
+    }
+    return false; 
+}
+
 
 // --- 自定义对话框管理 ---
 const dialogOverlay = document.getElementById('custom-dialog-overlay');
@@ -230,12 +263,12 @@ function showDialog(title, message, buttons) {
     return new Promise(resolve => {
         if (!dialogOverlay || !dialogTitleEl || !dialogMessageEl || !dialogButtonsEl) {
             console.error("对话框元素未在DOM中找到。");
-            resolve(window.confirm(`${title}\n\n${message}`));
+            resolve(window.confirm(`${title}\n\n${message}`)); 
             return;
         }
         dialogTitleEl.textContent = title;
         dialogMessageEl.textContent = message;
-        dialogButtonsEl.innerHTML = '';
+        dialogButtonsEl.innerHTML = ''; 
         buttons.forEach(btnInfo => {
             const button = document.createElement('button');
             button.textContent = btnInfo.text;
@@ -254,7 +287,7 @@ function showDialog(title, message, buttons) {
 function customConfirm(message, title = '请确认') {
     const buttons = [
         { text: '取消', value: false, class: 'bg-gray-600 hover:bg-gray-700' },
-        { text: '确定', value: true, class: 'bg-red-600 hover:bg-red-700' }
+        { text: '确定', value: true, class: 'bg-red-600 hover:bg-red-700' } 
     ];
     return showDialog(title, message, buttons);
 }
@@ -277,18 +310,18 @@ function showView(viewName, isAboutViewFlag = false) {
     }
 
     let targetViewName = viewName;
-    if (!isAboutViewFlag) {
+    if (!isAboutViewFlag) { 
         if (targetViewName === 'templates' && currentUser && currentUser.role !== 'admin') {
             console.warn("[showView] 普通用户尝试访问模板视图，已阻止。");
             customAlert("权限不足，无法访问地址模板管理。");
-            targetViewName = currentView === 'templates' ? 'sender' : currentView;
+            targetViewName = currentView === 'templates' ? 'sender' : currentView; 
         }
         if (targetViewName === 'user-management' && currentUser && currentUser.role !== 'admin') {
             console.warn("[showView] 普通用户尝试访问用户管理视图，已阻止。");
             customAlert("权限不足，无法访问用户管理。");
-            targetViewName = currentView === 'user-management' ? 'sender' : currentView;
+            targetViewName = currentView === 'user-management' ? 'sender' : currentView; 
         }
-        currentView = targetViewName;
+        currentView = targetViewName; 
     }
 
     const mainViews = {
@@ -300,7 +333,7 @@ function showView(viewName, isAboutViewFlag = false) {
     Object.values(mainViews).forEach(v => {
         if (v.main) { v.main.classList.add('hidden'); v.main.classList.remove('flex'); }
         if (v.sidebar) { v.sidebar.classList.add('hidden'); v.sidebar.classList.remove('flex'); }
-        if (v.nav) {
+        if (v.nav) { 
             v.nav.classList.remove(`bg-${v.color}-500`, 'text-white', `hover:bg-${v.color}-600`);
             v.nav.classList.add('bg-transparent', `text-gray-300`, `hover:bg-gray-700`, `hover:text-white`);
         }
@@ -310,43 +343,43 @@ function showView(viewName, isAboutViewFlag = false) {
     if(aboutView) aboutView.classList.add('hidden'); aboutView.classList.remove('flex');
     if(webhookEditorEl) webhookEditorEl.classList.add('hidden'); webhookEditorEl.classList.remove('flex');
     if(templateEditorEl) templateEditorEl.classList.add('hidden'); templateEditorEl.classList.remove('flex');
+    if(adminChangePasswordModal) adminChangePasswordModal.classList.add('hidden'); 
 
 
-    if (isAboutViewFlag) {
+    if (isAboutViewFlag) { 
         if (aboutView) {
             aboutView.classList.remove('hidden');
             aboutView.classList.add('flex');
             console.log("[showView] 显示 '关于' 视图。");
         }
-    } else if (mainViews[targetViewName]) {
+    } else if (mainViews[targetViewName]) { 
         const selectedViewConfig = mainViews[targetViewName];
         console.log(`[showView] 配置主视图: ${targetViewName}`);
         if (selectedViewConfig.main) { selectedViewConfig.main.classList.remove('hidden'); selectedViewConfig.main.classList.add('flex'); }
         if (selectedViewConfig.sidebar) { selectedViewConfig.sidebar.classList.remove('hidden'); selectedViewConfig.sidebar.classList.add('flex'); }
-        if (selectedViewConfig.nav) {
+        if (selectedViewConfig.nav) { 
             selectedViewConfig.nav.classList.add(`bg-${selectedViewConfig.color}-500`, 'text-white', `hover:bg-${selectedViewConfig.color}-600`);
             selectedViewConfig.nav.classList.remove('bg-transparent', `text-gray-300`, `hover:bg-gray-700`);
         }
 
         if (targetViewName === 'sender') {
-            renderWebhookList(); // 确保列表在视图切换时也刷新以反映正确的选中状态
+            renderWebhookList(); 
             if (selectedWebhookId && webhooks.some(w => w.id === selectedWebhookId)) {
                 showEditor('webhook-editor');
             } else {
                 showWelcomeScreen('发送配置', '请从左侧列表选择一个，或点击“新建配置”。');
             }
         } else if (targetViewName === 'templates' && currentUser && currentUser.role === 'admin') {
-            renderTemplateList(); // 确保列表在视图切换时也刷新
+            renderTemplateList(); 
             if (selectedTemplateId && webhookUrlTemplates.some(t => t.id === selectedTemplateId)) {
                 showEditor('template-editor');
             } else {
                 showWelcomeScreen('地址模板', '请从左侧列表选择一个，或点击“新建模板”。');
             }
         } else if (targetViewName === 'user-management' && currentUser && currentUser.role === 'admin') {
-            // 用户管理视图通常直接显示列表，不需要额外的编辑器切换
-            fetchAndRenderUsers();
+            fetchAndRenderUsers(); 
         }
-    } else {
+    } else { 
          console.log(`[showView] 未知视图 '${targetViewName}', 显示默认欢迎屏幕。`);
          showWelcomeScreen('项目', '从左侧选择一个项目，或创建一个新的。');
     }
@@ -355,6 +388,10 @@ function showEditor(editorId) {
     console.log(`[showEditor] 尝试显示编辑器: ${editorId}`);
     if(welcomeScreen) { welcomeScreen.classList.add('hidden'); welcomeScreen.classList.remove('flex'); }
     if(aboutView) { aboutView.classList.add('hidden'); aboutView.classList.remove('flex'); }
+    if(userManagementView && editorId !== 'user-management-editor') { 
+         userManagementView.classList.add('hidden'); userManagementView.classList.remove('flex');
+    }
+
 
     const editors = {
         'webhook-editor': webhookEditorEl,
@@ -362,7 +399,7 @@ function showEditor(editorId) {
     };
 
     Object.values(editors).forEach(editor => {
-        if (editor && editor.id !== editorId) {
+        if (editor && editor.id !== editorId) { 
              editor.classList.add('hidden');
              editor.classList.remove('flex');
         }
@@ -370,10 +407,10 @@ function showEditor(editorId) {
 
     if (editorId === 'webhook-editor' && webhookEditorEl) {
         webhookEditorEl.classList.remove('hidden');
-        webhookEditorEl.classList.add('flex');
+        webhookEditorEl.classList.add('flex'); 
         console.log("[showEditor] Webhook 编辑器已显示。");
     } else if (editorId === 'template-editor' && templateEditorEl) {
-        if (currentUser && currentUser.role === 'admin') {
+        if (currentUser && currentUser.role === 'admin') { 
             templateEditorEl.classList.remove('hidden');
             templateEditorEl.classList.add('flex');
             console.log("[showEditor] 模板编辑器已显示。");
@@ -392,10 +429,11 @@ function showWelcomeScreen(viewContextName, message) {
 
     if(webhookEditorEl) { webhookEditorEl.classList.add('hidden'); webhookEditorEl.classList.remove('flex'); }
     if(templateEditorEl) { templateEditorEl.classList.add('hidden'); templateEditorEl.classList.remove('flex'); }
-    if (userManagementView && currentView !== 'user-management') {
+    if (userManagementView && currentView !== 'user-management') { 
         userManagementView.classList.add('hidden'); userManagementView.classList.remove('flex');
     }
     if (aboutView) { aboutView.classList.add('hidden'); aboutView.classList.remove('flex'); }
+    if(adminChangePasswordModal) adminChangePasswordModal.classList.add('hidden');
 }
 
 // --- 模板管理 ---
@@ -404,26 +442,44 @@ function updateTemplateEditorUIForType(currentType) {
     const isWorkWeixin = currentType === 'workweixin';
     if(workweixinFieldsContainer) workweixinFieldsContainer.classList.toggle('hidden', !isWorkWeixin);
     if(templateUrlContainer) templateUrlContainer.classList.toggle('hidden', isWorkWeixin);
-
-    const templateHeadersSectionWrapper = document.getElementById('template-headers-list')?.parentElement;
+    
+    const templateHeadersSectionWrapper = document.getElementById('template-headers-section-wrapper'); 
     if(templateHeadersSectionWrapper){
          templateHeadersSectionWrapper.classList.toggle('hidden', isWorkWeixin);
     }
 
+    if(templateAccessControlContainer) {
+        templateAccessControlContainer.classList.toggle('hidden', !(currentUser && currentUser.role === 'admin')); 
+        if (isWorkWeixin) templateAccessControlContainer.classList.add('hidden');
+    }
+    if(templateAllowedUsersContainer && templateIsGlobalCheckbox) {
+         templateAllowedUsersContainer.classList.toggle('hidden', templateIsGlobalCheckbox.checked || isWorkWeixin || !(currentUser && currentUser.role === 'admin'));
+    }
+
+
     if (isWorkWeixin) {
         if(templateBodyLabel) templateBodyLabel.textContent = "消息内容模板 (企业微信):";
         if(templateBodyInput) templateBodyInput.placeholder = "例如: 您的消息: {userMessage}，支持 Markdown (需选择对应类型)";
-    } else {
+        if (templateIsGlobalCheckbox) {
+            templateIsGlobalCheckbox.checked = true;
+            templateIsGlobalCheckbox.disabled = true; 
+        }
+        if (templateAllowedUsersContainer) templateAllowedUsersContainer.classList.add('hidden');
+
+    } else { 
         if(templateBodyLabel) templateBodyLabel.textContent = "请求体模板 (通用JSON, 可用 {phoneNumber} 和 {userMessage}):";
         if(templateBodyInput) templateBodyInput.placeholder = '例如: {"msgtype":"text","text":{"content":"{userMessage}"},"touser":"{phoneNumber}"}';
         if(templateUrlInput) templateUrlInput.placeholder = 'https://api.example.com/send?key=YOUR_KEY&to={phoneNumber}';
         if(templateMethodSelect) templateMethodSelect.value = 'POST';
+        if (templateIsGlobalCheckbox) {
+             templateIsGlobalCheckbox.disabled = false; 
+        }
     }
 }
 function renderTemplateList() {
     console.log("[renderTemplateList] 开始渲染模板列表。");
     if(!templateListEl) { console.error("[renderTemplateList] templateListEl 未找到!"); return; }
-    templateListEl.innerHTML = '';
+    templateListEl.innerHTML = ''; 
     if (!currentUser || currentUser.role !== 'admin') {
         templateListEl.innerHTML = '<li class="text-center text-gray-500 py-4">权限不足</li>';
         console.log("[renderTemplateList] 用户无权限查看模板。");
@@ -440,15 +496,20 @@ function renderTemplateList() {
         let prefix = template.type === 'workweixin' ? '[企微] ' : '[通用] ';
         if (template.isGlobal) {
             prefix = `[全局] ${prefix}`;
+        } else if (Array.isArray(template.allowedUserIds) && template.allowedUserIds.length > 0) {
+            prefix = `[分享] ${prefix}`;
+        } else {
+            prefix = `[私有] ${prefix}`;
         }
+
         const isActive = template.id === selectedTemplateId;
         li.className = `sidebar-list-item ${isActive ? 'sidebar-list-item-active-teal text-white' : 'sidebar-list-item-inactive'}`;
-        li.innerHTML = `<span class="truncate" title="${prefix}${template.name || '未命名模板'}">${prefix}${template.name || '未命名模板'}</span><button data-delete-id="${template.id}" class="delete-btn-icon">&#x2715;</button>`;
+        li.innerHTML = `<span class="truncate" title="${prefix}${template.name || '未命名模板'}">${prefix}${template.name || '未命名模板'}</span><button data-template-id="${template.id}" class="delete-btn-icon delete-template-btn">&#x2715;</button>`;
         templateListEl.appendChild(li);
     });
     console.log("[renderTemplateList] 模板列表渲染完成。数量:", webhookUrlTemplates.length);
 }
-function renderTemplateEditor() {
+async function renderTemplateEditor() {
     console.log(`[renderTemplateEditor] 开始渲染模板编辑器。已选模板ID: ${selectedTemplateId}`);
     if (!currentUser || currentUser.role !== 'admin' || !templateEditorEl) {
         console.warn("[renderTemplateEditor] 用户无权限或编辑器元素不存在。");
@@ -468,19 +529,31 @@ function renderTemplateEditor() {
 
     const name = isNewTemplateMode ? `新模板 ${webhookUrlTemplates.length + 1}` : template.name;
     const type = isNewTemplateMode ? (templateTypeSelect ? templateTypeSelect.value : 'generic') : template.type;
-    const isGlobal = isNewTemplateMode ? false : !!template.isGlobal;
-
-    console.log(`[renderTemplateEditor] 编辑器名称: ${name}, 类型: ${type}, 是否全局: ${isGlobal}`);
+    
+    console.log(`[renderTemplateEditor] 编辑器名称: ${name}, 类型: ${type}`);
 
     if(templateNameInput) templateNameInput.value = name || '';
     if(templateTypeSelect) templateTypeSelect.value = type || 'generic';
-    updateTemplateEditorUIForType(type || 'generic');
+    updateTemplateEditorUIForType(type || 'generic'); 
 
-    const isGlobalCheckboxContainer = document.getElementById('template-is-global-container');
-    const isGlobalCheckbox = document.getElementById('template-is-global-checkbox');
-    if (isGlobalCheckboxContainer && isGlobalCheckbox) {
-        isGlobalCheckboxContainer.classList.remove('hidden');
-        isGlobalCheckbox.checked = isGlobal;
+    if (currentUser.role === 'admin') { 
+        const currentIsGlobal = isNewTemplateMode ? (type === 'workweixin') : (template ? !!template.isGlobal : (type === 'workweixin'));
+        const currentAllowedIds = isNewTemplateMode ? [] : (template ? (template.allowedUserIds || []) : []);
+
+        if (templateIsGlobalCheckbox) {
+            templateIsGlobalCheckbox.checked = currentIsGlobal;
+            templateIsGlobalCheckbox.disabled = (type === 'workweixin'); 
+        }
+        
+        if (type === 'workweixin') { 
+            if(templateAccessControlContainer) templateAccessControlContainer.classList.add('hidden');
+        } else { 
+            if(templateAccessControlContainer) templateAccessControlContainer.classList.remove('hidden');
+            await renderAllowedUsersSelector(currentAllowedIds);
+            if(templateAllowedUsersContainer && templateIsGlobalCheckbox) {
+                templateAllowedUsersContainer.classList.toggle('hidden', templateIsGlobalCheckbox.checked);
+            }
+        }
     }
 
 
@@ -493,7 +566,7 @@ function renderTemplateEditor() {
         if(workweixinAgentidInput) workweixinAgentidInput.value = isNewTemplateMode ? '' : template.workweixin_agentid || '';
         if(workweixinMsgtypeSelect) workweixinMsgtypeSelect.value = isNewTemplateMode ? 'text' : template.workweixin_msgtype || 'text';
         if(templateBodyInput) templateBodyInput.value = isNewTemplateMode ? '{userMessage}' : template.bodyTemplate || '{userMessage}';
-    } else { // Generic
+    } else { 
         if(templateUrlInput) {
             templateUrlInput.value = isNewTemplateMode ? '' : template.url || '';
             templateUrlInput.placeholder = 'https://api.example.com/send?key=YOUR_KEY&to={phoneNumber}';
@@ -504,6 +577,41 @@ function renderTemplateEditor() {
     }
     console.log("[renderTemplateEditor] 模板编辑器渲染完成。");
 }
+async function renderAllowedUsersSelector(selectedUserIds = []) {
+    if (!templateAllowedUsersList || !currentUser || currentUser.role !== 'admin') return;
+    
+    if (usersList.length === 0) {
+        try {
+            const users = await apiRequest('/api/users'); 
+            usersList = users || [];
+        } catch (error) {
+            console.error("获取用户列表以供模板授权失败:", error);
+            templateAllowedUsersList.innerHTML = '<p class="text-red-400 text-xs">无法加载用户列表。</p>';
+            return;
+        }
+    }
+
+    templateAllowedUsersList.innerHTML = '';
+    const nonAdminUsers = usersList.filter(u => u.role !== 'admin' && u.id !== currentUser.id); 
+
+    if (nonAdminUsers.length === 0) {
+        templateAllowedUsersList.innerHTML = '<p class="text-gray-500 text-xs">没有其他普通用户可供选择。</p>';
+        return;
+    }
+
+    nonAdminUsers.forEach(user => {
+        const li = document.createElement('li');
+        li.className = 'flex items-center';
+        const checkboxId = `user-access-${user.id}`;
+        li.innerHTML = `
+            <input type="checkbox" id="${checkboxId}" value="${user.id}" 
+                   class="h-4 w-4 text-teal-600 border-gray-500 rounded focus:ring-teal-500 bg-[#2f3241] mr-2 template-user-access-checkbox"
+                   ${selectedUserIds.includes(user.id) ? 'checked' : ''}>
+            <label for="${checkboxId}" class="text-sm text-gray-300 cursor-pointer">${user.username}</label>
+        `;
+        templateAllowedUsersList.appendChild(li);
+    });
+}
 async function handleNewTemplate() {
     console.log("[handleNewTemplate] 新建模板请求。");
     if (!currentUser || currentUser.role !== 'admin') { customAlert("权限不足"); return; }
@@ -513,9 +621,9 @@ async function handleNewTemplate() {
     }
     selectedTemplateId = null;
     if(templateTypeSelect) templateTypeSelect.value = 'generic';
-    renderTemplateList(); // 确保列表刷新以取消旧选中项的样式
+    renderTemplateList(); 
     showEditor('template-editor');
-    renderTemplateEditor();
+    renderTemplateEditor(); 
 }
 async function handleSelectTemplate(templateId) {
     console.log(`[handleSelectTemplate] 选择模板ID: ${templateId}`);
@@ -526,21 +634,28 @@ async function handleSelectTemplate(templateId) {
     }
     if (selectedTemplateId) {
         console.log(`[handleSelectTemplate] 当前已选模板 ${selectedTemplateId}，先保存更改。`);
-        await saveCurrentTemplateChanges(true);
+        await saveCurrentTemplateChanges(true); 
     }
     selectedTemplateId = templateId;
-    renderTemplateList(); // **关键修复**: 选择后重新渲染列表以更新选中样式
+    renderTemplateList(); 
     renderTemplateEditor();
-    showView('templates'); // 确保视图正确 (showView 也会调用 renderTemplateList)
 }
 async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
-    // ... (保持不变，确保日志和错误处理) ...
     console.log(`[saveCurrentTemplateChanges] 保存模板更改。已选模板ID: ${selectedTemplateId}, isSwitchingOrNew: ${isSwitchingOrNew}`);
     if (!currentUser || currentUser.role !== 'admin') { customAlert("权限不足"); return; }
-    if (!templateEditorEl || templateEditorEl.classList.contains('hidden') || (!selectedTemplateId && !isSwitchingOrNew && (!templateNameInput || !templateNameInput.value.startsWith("新模板")))) {
-        console.log("[saveCurrentTemplateChanges] 编辑器未显示或不满足保存条件，中止。");
+    
+    const isCurrentlyEditingNew = !selectedTemplateId;
+    if (!templateEditorEl || templateEditorEl.classList.contains('hidden')) {
+        console.log("[saveCurrentTemplateChanges] 编辑器未显示，中止。");
         return;
     }
+    if (!isSwitchingOrNew && !isCurrentlyEditingNew && (!templateNameInput || !templateNameInput.value.startsWith("新模板 "))) {
+        if (!selectedTemplateId) {
+             console.log("[saveCurrentTemplateChanges] 非切换，非新建，且无选中ID，中止。");
+             return;
+        }
+    }
+
     if (!templateNameInput || !templateTypeSelect || !workweixinCorpidInput || !workweixinCorpsecretInput || !workweixinAgentidInput || !workweixinMsgtypeSelect || !templateBodyInput || !templateUrlInput || !templateMethodSelect || !templateHeadersListEl) {
         console.error("[saveCurrentTemplateChanges] 一个或多个模板编辑器DOM元素未找到!");
         if (!isSwitchingOrNew) await customAlert("保存模板时发生错误：编辑器元素丢失。");
@@ -548,10 +663,10 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
     }
 
     let templateToSave = {};
-    const isNewTemplate = !selectedTemplateId;
-    console.log(`[saveCurrentTemplateChanges] isNewTemplate: ${isNewTemplate}`);
+    const isEffectivelyNew = isCurrentlyEditingNew;
+    console.log(`[saveCurrentTemplateChanges] isEffectivelyNew: ${isEffectivelyNew}`);
 
-    if (!isNewTemplate) {
+    if (!isEffectivelyNew && selectedTemplateId) {
         const existingTemplate = webhookUrlTemplates.find(t => t.id === selectedTemplateId);
         if (!existingTemplate) {
             console.error(`[saveCurrentTemplateChanges] 错误: 尝试保存不存在的模板 (ID: ${selectedTemplateId})。`);
@@ -563,17 +678,23 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
         templateToSave.id = null;
     }
 
-
-    templateToSave.name = templateNameInput.value.trim() || (isNewTemplate ? `新模板 ${webhookUrlTemplates.length + 1}` : '未命名模板');
+    templateToSave.name = templateNameInput.value.trim() || (isEffectivelyNew ? `新模板 ${webhookUrlTemplates.length + 1}` : '未命名模板');
     templateToSave.type = templateTypeSelect.value;
-
-    const isGlobalCheckbox = document.getElementById('template-is-global-checkbox');
-    if (isGlobalCheckbox) {
-        templateToSave.isGlobal = isGlobalCheckbox.checked;
-    } else {
-        templateToSave.isGlobal = false;
+    
+    if (templateToSave.type === 'workweixin') {
+        templateToSave.isGlobal = true; 
+        templateToSave.allowedUserIds = [];
+    } else { 
+        templateToSave.isGlobal = !!(templateIsGlobalCheckbox && templateIsGlobalCheckbox.checked);
+        templateToSave.allowedUserIds = [];
+        if (!templateToSave.isGlobal && templateAllowedUsersList) {
+            templateAllowedUsersList.querySelectorAll('.template-user-access-checkbox:checked').forEach(checkbox => {
+                templateToSave.allowedUserIds.push(checkbox.value);
+            });
+        }
     }
-    console.log(`[saveCurrentTemplateChanges] 待保存模板: 名称=${templateToSave.name}, 类型=${templateToSave.type}, 全局=${templateToSave.isGlobal}`);
+    console.log(`[saveCurrentTemplateChanges] 待保存模板: 名称=${templateToSave.name}, 类型=${templateToSave.type}, 全局=${templateToSave.isGlobal}, 授权用户=${templateToSave.allowedUserIds.join(',')}`);
+
 
     if (templateToSave.type === 'workweixin') {
         templateToSave.url = "WORKWEIXIN_APP_MESSAGE_API";
@@ -585,16 +706,16 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
         templateToSave.headers = [];
 
         const secretInputVal = workweixinCorpsecretInput.value.trim();
-        if (secretInputVal) {
+        if (secretInputVal && secretInputVal !== '********') {
             templateToSave.workweixin_corpsecret_new = secretInputVal;
-            console.log("[saveCurrentTemplateChanges] WorkWeixin: 新密钥已提供。");
-        } else if (isNewTemplate) {
+            console.log("[saveCurrentTemplateChanges] WorkWeixin: 新密钥已提供用于更新。");
+        } else if (isEffectivelyNew && !secretInputVal) {
             templateToSave.workweixin_corpsecret_new = "";
             console.log("[saveCurrentTemplateChanges] WorkWeixin: 新建模板，密钥为空。");
         }
         delete templateToSave.workweixin_corpsecret;
 
-    } else { // Generic template
+    } else { 
         templateToSave.url = templateUrlInput.value.trim();
         templateToSave.method = templateMethodSelect.value;
         templateToSave.bodyTemplate = templateBodyInput.value.trim();
@@ -620,7 +741,7 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
 
     try {
         let templatesPayload;
-        if (isNewTemplate) {
+        if (isEffectivelyNew) {
             templatesPayload = [...webhookUrlTemplates, templateToSave];
         } else {
             templatesPayload = webhookUrlTemplates.map(t => t.id === selectedTemplateId ? templateToSave : t);
@@ -633,10 +754,10 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
         if (response.success && response.templates) {
             webhookUrlTemplates = response.templates;
 
-            if (isNewTemplate && response.savedTemplate && response.savedTemplate.id) {
+            if (isEffectivelyNew && response.savedTemplate && response.savedTemplate.id) {
                 selectedTemplateId = response.savedTemplate.id;
                 console.log(`[saveCurrentTemplateChanges] 新模板已保存，ID设置为: ${selectedTemplateId}`);
-            } else if (isNewTemplate) {
+            } else if (isEffectivelyNew) {
                 const newName = templateToSave.name;
                 const newType = templateToSave.type;
                 const newIsGlobal = templateToSave.isGlobal;
@@ -644,6 +765,7 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
                     t.name === newName && t.type === newType && t.isGlobal === newIsGlobal &&
                     !webhookUrlTemplates.some(oldT => oldT.id === t.id && oldT !== t)
                 ) || response.templates.find(t => t.name === newName && t.type === newType && t.isGlobal === newIsGlobal);
+
                 if (newlyCreatedAndReturnedTemplate) {
                     selectedTemplateId = newlyCreatedAndReturnedTemplate.id;
                      console.log(`[saveCurrentTemplateChanges] 新模板已保存 (回退查找)，ID设置为: ${selectedTemplateId}`);
@@ -663,26 +785,25 @@ async function saveCurrentTemplateChanges(isSwitchingOrNew = false) {
         if (!isSwitchingOrNew) await customAlert(`保存模板失败: ${error.data?.message || error.message || error}`);
     } finally {
         renderTemplateList();
-        if (selectedTemplateId || (isNewTemplate && selectedTemplateId)) {
+        if (selectedTemplateId || (isEffectivelyNew && selectedTemplateId)) {
             renderTemplateEditor();
-        } else if (isNewTemplate && !selectedTemplateId) {
+        } else if (isEffectivelyNew && !selectedTemplateId) {
             showWelcomeScreen('地址模板', '模板创建可能未完全成功，请检查列表或重试。');
-        } else {
+        } else if (!isEffectivelyNew && !selectedTemplateId && !isSwitchingOrNew) {
             showWelcomeScreen('地址模板', '请从左侧列表选择一个，或点击“新建模板”。');
         }
     }
 }
 async function handleDeleteTemplate(templateIdToDelete) {
-    // ... (保持不变) ...
     console.log(`[handleDeleteTemplate] 删除模板ID: ${templateIdToDelete}`);
     if (!currentUser || currentUser.role !== 'admin') { customAlert("权限不足"); return; }
     const template = webhookUrlTemplates.find(t => t.id === templateIdToDelete);
     if (!template) { console.warn(`[handleDeleteTemplate] 未找到模板 ID ${templateIdToDelete}`); return; }
 
-    const usedBy = webhooks.filter(wh => wh.templateId === templateIdToDelete);
+    const usedBy = webhooks.filter(wh => Array.isArray(wh.templateIds) && wh.templateIds.includes(templateIdToDelete));
     let confirmMessage = `确定要删除模板 "${template.name}" 吗？`;
     if (usedBy.length > 0) {
-        confirmMessage += `\n\n警告：此模板被 ${usedBy.length} 个发送配置 (${usedBy.map(wh=>wh.name).join(', ')}) 使用。删除后，这些配置的地址模板将失效，您需要为它们重新选择模板。`;
+        confirmMessage += `\n\n警告：此模板被 ${usedBy.length} 个发送配置 (${usedBy.map(wh=>wh.name).join(', ')}) 使用。删除后，这些配置将无法使用此模板。`;
     }
 
     if (await customConfirm(confirmMessage, `删除模板 "${template.name}"`)) {
@@ -699,32 +820,35 @@ async function handleDeleteTemplate(templateIdToDelete) {
                 if (selectedTemplateId === templateIdToDelete) {
                     selectedTemplateId = null;
                     if (webhookUrlTemplates.length > 0) {
-                        console.log("[handleDeleteTemplate] 已删除当前选中模板，选择第一个可用模板。");
-                        await handleSelectTemplate(webhookUrlTemplates[0].id);
+                        console.log("[handleDeleteTemplate] 已删除当前选中模板，显示欢迎。");
+                        showWelcomeScreen('地址模板', '请从左侧列表选择一个模板。');
                     } else {
                         console.log("[handleDeleteTemplate] 已删除当前选中模板，无其他模板可选。");
-                        showView('templates');
-                        renderTemplateEditor();
+                        renderTemplateEditor(); 
                     }
                 }
+                renderTemplateList(); 
 
                 let webhooksModified = false;
                 const updatedWebhooks = webhooks.map(wh => {
-                    if (wh.templateId === templateIdToDelete) {
+                    if (Array.isArray(wh.templateIds) && wh.templateIds.includes(templateIdToDelete)) {
                         webhooksModified = true;
-                        return { ...wh, templateId: null };
+                        return { ...wh, templateIds: wh.templateIds.filter(id => id !== templateIdToDelete) }; 
                     }
                     return wh;
                 });
 
                 if (webhooksModified) {
-                    console.log("[handleDeleteTemplate] 更新受影响的发送配置。");
+                    console.log("[handleDeleteTemplate] 更新受影响的发送配置 (移除已删除的模板关联)。");
                     const webhookUpdateResponse = await apiRequest('/api/webhooks', { method: 'POST', body: JSON.stringify(updatedWebhooks) });
                     if(webhookUpdateResponse.success && webhookUpdateResponse.webhooks){
-                        webhooks = webhookUpdateResponse.webhooks;
-                        renderWebhookList();
-                        if(currentView === 'sender' && selectedWebhookId && updatedWebhooks.find(wh => wh.id === selectedWebhookId)?.templateId === null) {
-                            renderWebhookEditor();
+                        webhooks = webhookUpdateResponse.webhooks; 
+                        renderWebhookList(); 
+                        if(currentView === 'sender' && selectedWebhookId ) {
+                            const currentWh = webhooks.find(wh => wh.id === selectedWebhookId);
+                            if (currentWh && currentWh.templateIds && !currentWh.templateIds.includes(templateIdToDelete)) {
+                                renderWebhookEditor();
+                            }
                         }
                     }
                 }
@@ -734,21 +858,11 @@ async function handleDeleteTemplate(templateIdToDelete) {
         } catch (error) {
             console.error("[handleDeleteTemplate] 删除模板失败 (catch块):", error);
             await customAlert(`删除模板失败: ${error.data?.message || error.message || error}`);
-        } finally {
-            renderTemplateList();
         }
     }
 }
 
-// --- 发送配置管理 ---
-function isPhoneNumberRequired(template) {
-    if (!template || template.type === 'workweixin') return false;
-    const placeholder1 = "{phoneNumber}";
-    const placeholder2 = "{phone}";
-    const urlRequires = (template.url && (template.url.includes(placeholder1) || template.url.includes(placeholder2)));
-    const bodyRequires = (template.bodyTemplate && (template.bodyTemplate.includes(placeholder1) || template.bodyTemplate.includes(placeholder2)));
-    return urlRequires || bodyRequires;
-}
+// --- 发送配置管理 --- 
 function renderWebhookList() {
     console.log("[renderWebhookList] 开始渲染发送配置列表。");
     if(!webhookListEl) { console.error("[renderWebhookList] webhookListEl 未找到!"); return; }
@@ -763,11 +877,12 @@ function renderWebhookList() {
         li.dataset.id = wh.id;
         const isActive = wh.id === selectedWebhookId;
         li.className = `sidebar-list-item ${isActive ? 'sidebar-list-item-active-indigo text-white' : 'sidebar-list-item-inactive'}`;
-        li.innerHTML = `<span class="truncate">${wh.name || '未命名配置'}</span><button data-delete-id="${wh.id}" class="delete-btn-icon">&#x2715;</button>`;
+        li.innerHTML = `<span class="truncate">${wh.name || '未命名配置'}</span><button data-webhook-id="${wh.id}" class="delete-btn-icon delete-webhook-btn">&#x2715;</button>`;
         webhookListEl.appendChild(li);
     });
     console.log("[renderWebhookList] 发送配置列表渲染完成。数量:", webhooks.length);
 }
+
 function renderWebhookEditor() {
     console.log(`[renderWebhookEditor] 开始渲染发送配置编辑器。已选配置ID: ${selectedWebhookId}`);
     const webhook = webhooks.find(wh => wh.id === selectedWebhookId);
@@ -779,71 +894,107 @@ function renderWebhookEditor() {
     showEditor('webhook-editor');
     if(webhookNameInput) webhookNameInput.value = webhook.name || '';
 
-    if(templateSelect) {
-        templateSelect.innerHTML = '<option value="">-- 请选择一个地址模板 --</option>';
-        console.log("[renderWebhookEditor] 填充模板选择器，模板数量:", webhookUrlTemplates?.length);
-        if (webhookUrlTemplates && webhookUrlTemplates.length > 0) {
-            webhookUrlTemplates.forEach(template => {
-                const option = document.createElement('option');
-                option.value = template.id;
+    if (multiTemplateSelectorContainer) {
+        multiTemplateSelectorContainer.innerHTML = ''; 
+        const accessibleTemplates = webhookUrlTemplates.filter(template => {
+            if (currentUser.role === 'admin') return true; 
+            return template.isGlobal || (Array.isArray(template.allowedUserIds) && template.allowedUserIds.includes(currentUser.id));
+        });
+
+        if (accessibleTemplates.length > 0) {
+            accessibleTemplates.forEach(template => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center';
+                const checkboxId = `template-checkbox-${template.id}`;
+                const isChecked = Array.isArray(webhook.templateIds) && webhook.templateIds.includes(template.id);
+                
                 let prefix = template.type === 'workweixin' ? '[企微] ' : '[通用] ';
-                if (template.isGlobal && currentUser.role === 'admin') {
-                    prefix = `[全局] ${prefix}`;
-                } else if (template.isGlobal && currentUser.role !== 'admin') {
-                     prefix = `${prefix}`;
-                }
-                option.textContent = prefix + template.name;
-                if (template.id === webhook.templateId) {
-                    option.selected = true;
-                    console.log(`[renderWebhookEditor] 模板 '${template.name}' 已为配置 '${webhook.name}' 选中。`);
-                }
-                templateSelect.appendChild(option);
+                if (template.isGlobal) prefix = `[全局] ${prefix}`;
+                else if (currentUser.role === 'admin' && Array.isArray(template.allowedUserIds) && template.allowedUserIds.length > 0) prefix = `[分享] ${prefix}`;
+
+                div.innerHTML = `
+                    <input type="checkbox" id="${checkboxId}" value="${template.id}" 
+                           class="h-4 w-4 text-indigo-600 border-gray-500 rounded focus:ring-indigo-500 bg-[#2f3241] mr-2 multi-template-checkbox"
+                           ${isChecked ? 'checked' : ''}>
+                    <label for="${checkboxId}" class="text-sm text-gray-300 cursor-pointer truncate" title="${prefix}${template.name}">${prefix}${template.name}</label>
+                `;
+                multiTemplateSelectorContainer.appendChild(div);
             });
         } else {
-             const option = document.createElement('option');
-             option.value = "";
-             option.textContent = (currentUser.role === 'admin') ? "无可用模板 (或全局模板)，请先创建" : "无可用共享模板";
-             option.disabled = true;
-             templateSelect.appendChild(option);
-             console.log("[renderWebhookEditor] 无可用模板。");
+            multiTemplateSelectorContainer.innerHTML = `<p class="text-gray-500 text-xs">${currentUser.role === 'admin' ? "无可用模板，请先创建。" : "无可用共享模板。"}</p>`;
         }
     }
+    
+    let showPhoneInputOverall = false;
+    let isAnyWorkWeixinSelected = false;
+    let isAnyGenericTemplateThatNeedsPhoneSelected = false;
+    const currentSelectedTemplateIdsInConfig = webhook.templateIds || [];
 
-    const selectedTemplate = webhookUrlTemplates.find(t => t.id === webhook.templateId);
-    const isWW = selectedTemplate && selectedTemplate.type === 'workweixin';
-    console.log(`[renderWebhookEditor] 选定模板: ${selectedTemplate?.name}, 是否企业微信: ${isWW}`);
-
-    const requiresPhone = selectedTemplate ? isPhoneNumberRequired(selectedTemplate) : false;
-    if(phoneNumberSection) phoneNumberSection.classList.toggle('hidden', !isWW && !requiresPhone);
-    if(recipientLabel) recipientLabel.textContent = isWW ? "接收者 (touser/@all):" : "手机号码/目标参数:";
-    if(phoneNumberInput) {
-        phoneNumberInput.value = webhook.phone || (isWW ? '@all' : '');
-        phoneNumberInput.placeholder = isWW ? "例: UserID1|UserID2 或 @all" : (requiresPhone ? "请输入目标手机号码" : "参数 (如不通过URL提供)");
+    if (currentSelectedTemplateIdsInConfig.length > 0) {
+        for (const templateId of currentSelectedTemplateIdsInConfig) {
+            const template = webhookUrlTemplates.find(t => t.id === templateId);
+            if (template) {
+                if (template.type === 'workweixin') {
+                    isAnyWorkWeixinSelected = true;
+                }
+                if (isPhoneNumberRequiredForConfirmation(template)) { 
+                    isAnyGenericTemplateThatNeedsPhoneSelected = true;
+                }
+            }
+        }
     }
+    showPhoneInputOverall = isAnyWorkWeixinSelected || isAnyGenericTemplateThatNeedsPhoneSelected;
+    
+    if(phoneNumberSection) phoneNumberSection.classList.toggle('hidden', !showPhoneInputOverall);
+    
+    if(recipientLabel) {
+        if (isAnyWorkWeixinSelected) recipientLabel.textContent = "接收者 (touser/@all):";
+        else if (isAnyGenericTemplateThatNeedsPhoneSelected) recipientLabel.textContent = "手机号码/目标参数:";
+        else recipientLabel.textContent = "手机号码/接收者:";
+    }
+    if(phoneNumberInput) {
+        phoneNumberInput.value = webhook.phone || (isAnyWorkWeixinSelected ? '@all' : '');
+        let placeholderText = "请输入参数";
+        if (isAnyWorkWeixinSelected) placeholderText = "例: UserID1|UserID2 或 @all";
+        else if (isAnyGenericTemplateThatNeedsPhoneSelected) placeholderText = "请输入目标手机号码";
+        phoneNumberInput.placeholder = placeholderText;
+    }
+
     if(webhookBodyTextarea) {
         webhookBodyTextarea.value = webhook.plainBody || '';
-        webhookBodyTextarea.placeholder = isWW ? "输入企业微信消息内容..." : "输入纯文本消息 (将替换模板中的 {userMessage})";
+        webhookBodyTextarea.placeholder = isAnyWorkWeixinSelected ? "输入企业微信消息内容..." : "输入纯文本消息 (将替换模板中的 {userMessage})";
     }
 
-    updateSelectedTemplateUrlDisplay(webhook.templateId);
+    updateSelectedTemplateUrlDisplay(currentSelectedTemplateIdsInConfig.length > 0 ? currentSelectedTemplateIdsInConfig[0] : null); 
+
+    let showHeadersSectionOverall = false;
+    if (currentSelectedTemplateIdsInConfig.length > 0) {
+        const allSelectedAreWorkWeixin = currentSelectedTemplateIdsInConfig.every(id => {
+            const t = webhookUrlTemplates.find(tmpl => tmpl.id === id);
+            return t && t.type === 'workweixin';
+        });
+        showHeadersSectionOverall = !allSelectedAreWorkWeixin;
+    } else { 
+        showHeadersSectionOverall = true; 
+    }
 
     const webhookHeadersContainer = document.getElementById('add-header-btn')?.parentElement;
     if(webhookHeadersContainer){
-      webhookHeadersContainer.classList.toggle('hidden', isWW);
+      webhookHeadersContainer.classList.toggle('hidden', !showHeadersSectionOverall);
     }
-    if (!isWW && headersListEl) {
+    if (showHeadersSectionOverall && headersListEl) { 
         renderHeaders(webhook.headers, headersListEl, 'header-key-input', 'header-value-input', 'remove-header-btn', 'indigo');
-    } else if (isWW && headersListEl) {
-        headersListEl.innerHTML = '';
+    } else if (!showHeadersSectionOverall && headersListEl) {
+        headersListEl.innerHTML = ''; 
     }
-
 
     renderHistoryLog(selectedWebhookId);
     renderScheduledTaskList();
     setActiveTab(currentActiveTab, true);
     console.log("[renderWebhookEditor] 发送配置编辑器渲染完成。");
 }
-function updateSelectedTemplateUrlDisplay(templateId) {
+
+function updateSelectedTemplateUrlDisplay(templateId) { 
     console.log(`[updateSelectedTemplateUrlDisplay] 更新URL显示，模板ID: ${templateId}, 当前用户角色: ${currentUser?.role}`);
     if (!selectedTemplateUrlContainer) { console.warn("[updateSelectedTemplateUrlDisplay] selectedTemplateUrlContainer 元素未找到。"); return; }
     const urlDisplayEl = document.getElementById('selected-template-url-display');
@@ -862,21 +1013,40 @@ function updateSelectedTemplateUrlDisplay(templateId) {
         console.log("[updateSelectedTemplateUrlDisplay] 非管理员，隐藏模板URL。");
         return;
     }
+    
+    const webhook = webhooks.find(wh => wh.id === selectedWebhookId);
+    if (!webhook || !Array.isArray(webhook.templateIds) || webhook.templateIds.length === 0) {
+        selectedTemplateUrlContainer.classList.add('hidden');
+        urlDisplayEl.textContent = '未选择模板或多选。URL预览基于首个选定模板。';
+        toggleBtn.classList.add('hidden');
+        return;
+    }
 
-    if (!templateId) { selectedTemplateUrlContainer.classList.add('hidden'); return; }
+    const firstTemplateIdToDisplay = templateId || webhook.templateIds[0]; 
+    if (!firstTemplateIdToDisplay) { selectedTemplateUrlContainer.classList.add('hidden'); return; }
 
-    const template = webhookUrlTemplates.find(t => t.id === templateId);
-    if (!template) { selectedTemplateUrlContainer.classList.add('hidden'); console.warn(`[updateSelectedTemplateUrlDisplay] 未找到模板ID ${templateId}`); return; }
-
-    const isWorkWeixinTemplate = template.type === 'workweixin';
-    const fullUrl = template.url || ''; 
+    const templateToDisplay = webhookUrlTemplates.find(t => t.id === firstTemplateIdToDisplay);
+    if (!templateToDisplay) { 
+        urlDisplayEl.textContent = '首个选定模板信息未找到。';
+        toggleBtn.classList.add('hidden');
+        selectedTemplateUrlContainer.classList.remove('hidden'); 
+        return;
+    }
+    
+    let infoPrefix = `预览首模板: `;
+     if (webhook.templateIds.length > 1) {
+        infoPrefix = `首模板预览 (共选 ${webhook.templateIds.length} 个): `;
+    }
+    
+    const isWorkWeixinTemplate = templateToDisplay.type === 'workweixin';
+    const fullUrl = templateToDisplay.url || ''; 
 
     const displayInfo = getDisplayableUrl(fullUrl, isWorkWeixinTemplate);
     console.log(`[updateSelectedTemplateUrlDisplay] URL显示信息 (管理员): `, displayInfo);
 
-    urlDisplayEl.textContent = displayInfo.text;
+    urlDisplayEl.textContent = infoPrefix + displayInfo.text; 
     urlDisplayEl.title = displayInfo.title; 
-    urlDisplayEl.dataset.fullUrl = isWorkWeixinTemplate ? "WORKWEIXIN_API" : fullUrl; 
+    urlDisplayEl.dataset.fullUrl = fullUrl; 
 
     if (isWorkWeixinTemplate || displayInfo.text === fullUrl) { 
         toggleBtn.classList.add('hidden');
@@ -893,48 +1063,51 @@ async function handleNewWebhook() {
     console.log("[handleNewWebhook] 新建发送配置请求。");
     if (selectedWebhookId) {
         console.log("[handleNewWebhook] 当前已选配置，先保存更改。");
-        await saveCurrentWebhookChanges(true);
+        await saveCurrentWebhookChanges(true); 
     }
+    const accessibleTemplates = webhookUrlTemplates.filter(template => {
+        if (currentUser.role === 'admin') return true;
+        return template.isGlobal || (Array.isArray(template.allowedUserIds) && template.allowedUserIds.includes(currentUser.id));
+    });
 
-    if ((!webhookUrlTemplates || webhookUrlTemplates.length === 0)) {
-        await customAlert("没有可用的地址模板。请联系管理员创建全局模板，或者（如果您是管理员）请先创建模板。");
+    if ((!accessibleTemplates || accessibleTemplates.length === 0)) {
+        await customAlert("没有可用的地址模板。请联系管理员创建或共享模板。");
         if (currentUser.role === 'admin') showView('templates');
         return;
     }
 
     const newWebhookData = {
-        id: null,
+        id: null, 
         name: `新发送配置 ${webhooks.length + 1}`,
-        templateId: webhookUrlTemplates.length > 0 ? webhookUrlTemplates[0].id : null,
+        templateIds: [], 
         phone: '',
         plainBody: "来自 Webhook Sender 的测试消息",
         headers: []
     };
-    const payload = [...webhooks, newWebhookData];
+    const payload = [...webhooks, newWebhookData]; 
 
     try {
         const response = await apiRequest('/api/webhooks', { method: 'POST', body: JSON.stringify(payload) });
         console.log("[handleNewWebhook] 后端响应:", response);
         if (response.success && response.webhooks) {
-            webhooks = response.webhooks;
+            webhooks = response.webhooks; 
 
             let addedWebhook = response.webhooks.find(wh =>
                 wh.name === newWebhookData.name &&
-                wh.templateId === newWebhookData.templateId &&
+                JSON.stringify(wh.templateIds) === JSON.stringify(newWebhookData.templateIds) &&
                 !payload.slice(0, payload.length -1).map(w => w.id).includes(wh.id)
             );
-             if (!addedWebhook && response.webhooks.length > webhooks.length -1 ) {
-                 const oldWebhookIds = webhooks.slice(0, webhooks.length - (response.webhooks.length - (webhooks.length -1) ) ).map(w => w.id); // Corrected logic for old IDs
+             if (!addedWebhook && response.webhooks.length > webhooks.length -1 ) { 
+                 const oldWebhookIds = webhooks.slice(0, webhooks.length - (response.webhooks.length - (webhooks.length -1) ) ).map(w => w.id);
                  addedWebhook = response.webhooks.find(wh => !oldWebhookIds.includes(wh.id) && wh.name === newWebhookData.name);
             }
 
-
             if (addedWebhook && addedWebhook.id) {
                 console.log(`[handleNewWebhook] 新建配置已创建并找到，ID: ${addedWebhook.id}`);
-                await handleSelectWebhook(addedWebhook.id);
+                await handleSelectWebhook(addedWebhook.id); 
             } else {
-                console.warn("[handleNewWebhook] 无法可靠地识别新建配置以自动选择。");
-                renderWebhookList(); // 确保列表在未选中新项时也刷新
+                console.warn("[handleNewWebhook] 无法可靠地识别新建配置以自动选择。将只刷新列表。");
+                renderWebhookList(); 
                 showWelcomeScreen('发送配置', '新配置已创建，请从列表选择。');
             }
         } else {
@@ -951,14 +1124,13 @@ async function handleSelectWebhook(webhookId) {
         console.log("[handleSelectWebhook] 配置已选择且编辑器可见，无操作。");
         return;
     }
-    if (selectedWebhookId) { // 如果之前有选中的，先保存它
+    if (selectedWebhookId) { 
         console.log(`[handleSelectWebhook] 当前已选配置 ${selectedWebhookId}，先保存更改。`);
-        await saveCurrentWebhookChanges(true); // isSwitching = true
+        await saveCurrentWebhookChanges(true); 
     }
-    selectedWebhookId = webhookId; // 更新全局选中的ID
-    renderWebhookList(); // **关键修复**: 选择后重新渲染列表以更新选中样式
-    renderWebhookEditor(); // 渲染新选中项的编辑器内容
-    showView('sender'); // 确保视图正确 (showView 也会调用 renderWebhookList)
+    selectedWebhookId = webhookId; 
+    renderWebhookList(); 
+    renderWebhookEditor(); 
 }
 async function saveCurrentWebhookChanges(isSwitching = false) {
     console.log(`[saveCurrentWebhookChanges] 保存发送配置更改。已选配置ID: ${selectedWebhookId}, isSwitching: ${isSwitching}`);
@@ -972,7 +1144,7 @@ async function saveCurrentWebhookChanges(isSwitching = false) {
         if (!isSwitching) await customAlert("保存配置失败：找不到原始配置。");
         return;
     }
-    if (!webhookNameInput || !templateSelect || !phoneNumberInput || !webhookBodyTextarea || !headersListEl) {
+    if (!webhookNameInput || !multiTemplateSelectorContainer || !phoneNumberInput || !webhookBodyTextarea || !headersListEl) {
         console.error("[saveCurrentWebhookChanges] 一个或多个发送配置编辑器DOM元素未找到!");
         if (!isSwitching) await customAlert("保存发送配置时发生错误：编辑器元素丢失。");
         return;
@@ -980,14 +1152,35 @@ async function saveCurrentWebhookChanges(isSwitching = false) {
 
     const webhookToUpdate = { ...webhooks[index] };
     webhookToUpdate.name = webhookNameInput.value.trim() || '未命名配置';
-    webhookToUpdate.templateId = templateSelect.value || null;
-    webhookToUpdate.phone = phoneNumberInput.value.trim();
-    webhookToUpdate.plainBody = webhookBodyTextarea.value;
-    console.log(`[saveCurrentWebhookChanges] 待保存配置: 名称=${webhookToUpdate.name}, 模板ID=${webhookToUpdate.templateId}`);
+    
+    webhookToUpdate.templateIds = [];
+    if (multiTemplateSelectorContainer) {
+        multiTemplateSelectorContainer.querySelectorAll('.multi-template-checkbox:checked').forEach(checkbox => {
+            webhookToUpdate.templateIds.push(checkbox.value);
+        });
+    }
+    console.log(`[saveCurrentWebhookChanges] 收集到的 templateIds: ${webhookToUpdate.templateIds.join(', ')}`);
 
-    const selectedTemplateForSave = webhookUrlTemplates.find(t => t.id === webhookToUpdate.templateId);
-    if (selectedTemplateForSave && selectedTemplateForSave.type === 'workweixin') {
-        webhookToUpdate.headers = [];
+    webhookToUpdate.phone = phoneNumberInput.value.trim();
+    webhookToUpdate.plainBody = webhookBodyTextarea.value; 
+    console.log(`[saveCurrentWebhookChanges] 待保存配置: 名称=${webhookToUpdate.name}`);
+
+    let primaryTemplateTypeIsWorkWeixin = false;
+    if (webhookToUpdate.templateIds.length > 0) {
+        const firstTemplate = webhookUrlTemplates.find(t => t.id === webhookToUpdate.templateIds[0]);
+        if (firstTemplate && firstTemplate.type === 'workweixin') {
+            const allSelectedAreWorkWeixin = webhookToUpdate.templateIds.every(tid => {
+                const t = webhookUrlTemplates.find(tmpl => tmpl.id === tid);
+                return t && t.type === 'workweixin';
+            });
+            if (allSelectedAreWorkWeixin) { 
+                primaryTemplateTypeIsWorkWeixin = true;
+            }
+        }
+    }
+
+    if (primaryTemplateTypeIsWorkWeixin) {
+        webhookToUpdate.headers = []; 
     } else {
         webhookToUpdate.headers = [];
         if (headersListEl) {
@@ -1011,7 +1204,7 @@ async function saveCurrentWebhookChanges(isSwitching = false) {
         const response = await apiRequest('/api/webhooks', { method: 'POST', body: JSON.stringify(payload) });
          console.log("[saveCurrentWebhookChanges] 后端响应:", response);
         if (response.success && response.webhooks) {
-            webhooks = response.webhooks;
+            webhooks = response.webhooks; 
             if (!isSwitching) await customAlert('发送配置已保存！');
         } else {
             throw new Error(response.message || "保存配置失败 (来自后端)");
@@ -1020,15 +1213,15 @@ async function saveCurrentWebhookChanges(isSwitching = false) {
         console.error("[saveCurrentWebhookChanges] 保存配置失败 (catch块):", error);
         if (!isSwitching) await customAlert(`保存配置失败: ${error.data?.message || error.message || error}`);
     } finally {
-        renderWebhookList(); // 总是重新渲染列表以反映任何更改（例如名称）
-        if (!isSwitching && selectedWebhookId) { // 如果不是切换操作，且仍有选中项，则重绘编辑器
+        renderWebhookList(); 
+        if (!isSwitching && selectedWebhookId) { 
             renderWebhookEditor();
         }
     }
 }
 async function handleDeleteWebhook(webhookIdToDelete) {
     console.log(`[handleDeleteWebhook] 删除发送配置ID: ${webhookIdToDelete}`);
-     if (await customConfirm('确定要删除这个发送配置吗？其发送历史也将被清除。', '删除发送配置')) {
+     if (await customConfirm('确定要删除这个发送配置吗？其发送历史和定时任务也将被清除。', '删除发送配置')) {
         console.log(`[handleDeleteWebhook] 用户确认删除配置 ID: ${webhookIdToDelete}`);
         try {
             const updatedWebhooks = webhooks.filter(wh => wh.id !== webhookIdToDelete);
@@ -1036,23 +1229,26 @@ async function handleDeleteWebhook(webhookIdToDelete) {
             console.log("[handleDeleteWebhook] 后端删除响应:", response);
 
             if (response.success && response.webhooks) {
-                webhooks = response.webhooks;
-                delete history[webhookIdToDelete];
+                webhooks = response.webhooks; 
+                delete history[webhookIdToDelete]; 
+                scheduledTasks = scheduledTasks.filter(task => task.originalWebhookId !== webhookIdToDelete);
 
-                await customAlert('发送配置已删除。');
+                await customAlert('发送配置及其关联数据已删除。');
 
                 if (selectedWebhookId === webhookIdToDelete) {
                     selectedWebhookId = null;
                     if (webhooks.length > 0) {
-                         console.log("[handleDeleteWebhook] 已删除当前选中配置，选择第一个可用配置。");
-                        await handleSelectWebhook(webhooks[0].id); // 这会触发列表和编辑器的重新渲染
+                         console.log("[handleDeleteWebhook] 已删除当前选中配置，显示欢迎界面。");
+                         showWelcomeScreen('发送配置', '请从左侧列表选择一个，或点击“新建配置”。');
                     } else {
                         console.log("[handleDeleteWebhook] 已删除当前选中配置，无其他配置可选。");
-                        renderWebhookList(); // 确保列表显示为空
+                        renderWebhookList(); 
                         showWelcomeScreen('发送配置', '请从左侧列表选择一个，或点击“新建配置”。');
                     }
-                } else {
-                    renderWebhookList(); // 如果删除的不是当前选中的，只需刷新列表
+                }
+                renderWebhookList(); 
+                if (currentView === 'sender' && webhookEditorEl && !webhookEditorEl.classList.contains('hidden')) {
+                    renderWebhookEditor();
                 }
             } else {
                 throw new Error(response.message || '删除配置失败 (来自后端)');
@@ -1065,51 +1261,6 @@ async function handleDeleteWebhook(webhookIdToDelete) {
 }
 
 // --- 核心功能 (发送, 定时, 标签页, 任务) ---
-// ... (buildClientSideRequestPayload, handleSendNow, handleSaveTask, renderHeaders, setActiveTab, handleCancelTask, renderHistoryLog, renderScheduledTaskList 保持不变) ...
-async function buildClientSideRequestPayload(webhookConfig, template, recipientOrPhone, userMessageText) {
-    console.log(`[buildClientSideRequestPayload] 构建客户端负载。配置: ${webhookConfig?.name}, 模板: ${template?.name}`);
-    if (!template) {
-        await customAlert('构建请求失败：地址模板无效或未选择。');
-        return null;
-    }
-    const payloadForApi = {
-        originalWebhookId: webhookConfig.id,
-        templateId: template.id,
-        phone: recipientOrPhone,
-        plainBody: userMessageText,
-        headers: webhookConfig.headers || [],
-        webhookSnapshot: {
-            name: webhookConfig.name,
-            templateId: template.id,
-            method: template.method,
-            headers: webhookConfig.headers,
-            plainBody: userMessageText,
-            phoneNumber: recipientOrPhone,
-            bodyTemplate: template.bodyTemplate,
-            url: template.url,
-            touser: recipientOrPhone,
-            workweixin_msgtype: template.workweixin_msgtype
-        },
-        templateType: template.type
-    };
-
-     if (template.type === 'workweixin') {
-        payloadForApi.workweixinConfig = {
-            corpid: template.workweixin_corpid,
-            agentid: template.workweixin_agentid,
-            touser: recipientOrPhone,
-            msgtype: template.workweixin_msgtype
-        };
-        payloadForApi.webhookSnapshot.url = "WORKWEIXIN_APP_MESSAGE_API";
-        delete payloadForApi.webhookSnapshot.method;
-        delete payloadForApi.webhookSnapshot.headers;
-        delete payloadForApi.webhookSnapshot.bodyTemplate;
-    } else {
-        payloadForApi.webhookSnapshot.url = template.url;
-    }
-    console.log(`[buildClientSideRequestPayload] 构建完成的负载:`, JSON.stringify(payloadForApi));
-    return payloadForApi;
-}
 async function handleSendNow() {
     console.log("[handleSendNow] 尝试立即发送。");
     if (!selectedWebhookId) { await customAlert('请先选择一个发送配置。'); return; }
@@ -1118,60 +1269,120 @@ async function handleSendNow() {
     if (!webhookConfig) { await customAlert('未找到选定的发送配置！'); return; }
     console.log(`[handleSendNow] 使用配置: ${webhookConfig.name}`);
 
-    const template = webhookUrlTemplates.find(t => t.id === webhookConfig.templateId);
-    if (!template) { await customAlert('发送配置未关联有效的地址模板！请选择一个模板。'); return; }
-     console.log(`[handleSendNow] 使用模板: ${template.name}, 类型: ${template.type}`);
+    const selectedTemplateIdsFromUI = [];
+    if (multiTemplateSelectorContainer) {
+        multiTemplateSelectorContainer.querySelectorAll('.multi-template-checkbox:checked').forEach(checkbox => {
+            selectedTemplateIdsFromUI.push(checkbox.value);
+        });
+    }
+
+    const templateIdsToSend = selectedTemplateIdsFromUI.length > 0 ? selectedTemplateIdsFromUI : (webhookConfig.templateIds || []);
+
+    if (!Array.isArray(templateIdsToSend) || templateIdsToSend.length === 0) {
+        await customAlert('发送配置未关联任何有效的地址模板！请选择至少一个模板。');
+        return;
+    }
+    console.log(`[handleSendNow] 将使用模板IDs: [${templateIdsToSend.join(', ')}]`);
 
     const recipientOrPhone = phoneNumberInput.value.trim();
     const messageContent = webhookBodyTextarea.value.trim();
 
-    if (template.type === 'workweixin') {
-        if (!recipientOrPhone) { await customAlert('企业微信模板需要接收者 (touser/@all)，请输入。'); phoneNumberInput.focus(); return; }
-        if (!messageContent && (template.workweixin_msgtype === 'text' || template.workweixin_msgtype === 'markdown')) {
-             await customAlert('请输入消息内容。'); webhookBodyTextarea.focus(); return;
-        }
-    } else {
-        if (!template.url || template.url.trim() === '') { await customAlert('无法发送：所选地址模板没有有效的URL。'); return; }
-        if (isPhoneNumberRequired(template) && !recipientOrPhone) {
-            await customAlert('当前模板需要手机号码/目标参数，请输入。');
-            phoneNumberInput.focus();
+    let needsRecipientInfo = false; 
+    let isAnyWorkWeixinAmongSelected = false;
+    let isAnyGenericRequiringPhonePlaceholder = false; 
+
+    for (const templateId of templateIdsToSend) {
+        const template = webhookUrlTemplates.find(t => t.id === templateId);
+        if (template) {
+            if (template.type === 'workweixin') {
+                isAnyWorkWeixinAmongSelected = true;
+            }
+            if (isPhoneNumberRequiredForConfirmation(template)) { 
+                isAnyGenericRequiringPhonePlaceholder = true;
+            }
+        } else {
+            await customAlert(`错误：找不到ID为 ${templateId} 的模板信息，无法继续发送。`);
             return;
+        }
+    }
+    const uiInputRequired = isAnyWorkWeixinAmongSelected || isAnyGenericRequiringPhonePlaceholder;
+
+
+    if (uiInputRequired && !recipientOrPhone) {
+        let alertMessage = "当前选中的模板需要填写接收者/手机号码信息。";
+        if (isAnyWorkWeixinAmongSelected && !isAnyGenericRequiringPhonePlaceholder) {
+            alertMessage = "当前选中的企业微信模板需要接收者 (touser/@all)，请输入。";
+        } else if (!isAnyWorkWeixinAmongSelected && isAnyGenericRequiringPhonePlaceholder) {
+            alertMessage = "当前选中的通用模板需要手机号码/目标参数，请输入。";
+        } else if (isAnyWorkWeixinAmongSelected && isAnyGenericRequiringPhonePlaceholder) {
+             alertMessage = "当前选中的模板组合中，部分模板需要手机号码/目标参数，部分企业微信模板需要接收者。请输入相应信息。";
+        }
+        await customAlert(alertMessage);
+        phoneNumberInput.focus();
+        return;
+    }
+
+    if (isAnyWorkWeixinAmongSelected && !messageContent) {
+        const wwTextOrMarkdownSelected = templateIdsToSend.some(id => {
+            const t = webhookUrlTemplates.find(tmpl => tmpl.id === id);
+            return t && t.type === 'workweixin' && (t.workweixin_msgtype === 'text' || t.workweixin_msgtype === 'markdown');
+        });
+        if (wwTextOrMarkdownSelected) {
+            await customAlert('请输入消息内容。');
+            webhookBodyTextarea.focus();
+            return;
+        }
+    }
+    
+    const hasGenericTemplate = templateIdsToSend.some(id => {
+        const t = webhookUrlTemplates.find(tmpl => tmpl.id === id);
+        return t && t.type === 'generic';
+    });
+
+    if (hasGenericTemplate) {
+        for (const templateId of templateIdsToSend) {
+            const template = webhookUrlTemplates.find(t => t.id === templateId);
+            if (template && template.type === 'generic') {
+                if (!template.url || template.url.trim() === '' || template.url === "WORKWEIXIN_APP_MESSAGE_API") {
+                    await customAlert(`无法发送：模板 "${template.name}" 没有有效的通用URL。`);
+                    return; 
+                }
+            }
         }
     }
 
     let confirmed = false;
-    if (template.type === 'generic' && isPhoneNumberRequired(template) && recipientOrPhone) {
-        const confirmMessage = `确定要向 "${recipientOrPhone}" 发送消息吗？\n配置: ${webhookConfig.name}\n内容: ${messageContent.substring(0,30)}...`;
+    if (isAnyGenericRequiringPhonePlaceholder && recipientOrPhone) {
+        const confirmMessage = `确定要向 "${recipientOrPhone}" (手机号/目标参数) 发送消息吗？\n配置: ${webhookConfig.name}\n内容: ${messageContent.substring(0,30)}...`;
         confirmed = await customConfirm(confirmMessage, '发送确认');
-    } else if (template.type === 'workweixin' && recipientOrPhone.toLowerCase() === '@all' && messageContent) {
-        confirmed = await customConfirm(`确定要向所有人 (@all) 发送此企业微信消息吗？\n配置: ${webhookConfig.name}\n内容: ${messageContent.substring(0,30)}...`, '发送给所有人确认');
     } else {
-        confirmed = true;
+        confirmed = true; 
     }
-
+    
     if (!confirmed) { console.log("[handleSendNow] 用户取消发送。"); return; }
 
     isSending = true;
     if(sendNowBtn) { sendNowBtn.textContent = '发送中...'; sendNowBtn.disabled = true; }
 
     const payloadForApiSendNow = {
-        id: webhookConfig.id,
-        templateId: template.id,
-        phone: recipientOrPhone,
-        plainBody: messageContent,
-        headers: webhookConfig.headers
+        id: webhookConfig.id, 
+        templateIds: templateIdsToSend, 
+        phone: recipientOrPhone, 
+        plainBody: messageContent, 
+        headers: webhookConfig.headers 
     };
     console.log("[handleSendNow] 发送给 /api/send-now 的负载:", JSON.stringify(payloadForApiSendNow));
 
     try {
         const resultEntry = await apiRequest('/api/send-now', { method: 'POST', body: JSON.stringify(payloadForApiSendNow) });
         console.log("[handleSendNow] /api/send-now 响应:", resultEntry);
+        
         if (!history[resultEntry.webhookId]) history[resultEntry.webhookId] = [];
-        history[resultEntry.webhookId].unshift(resultEntry);
+        history[resultEntry.webhookId].unshift(resultEntry); 
         if (history[resultEntry.webhookId].length > 50) {
             history[resultEntry.webhookId] = history[resultEntry.webhookId].slice(0, 50);
         }
-        setActiveTab('history', true);
+        setActiveTab('history', true); 
     } catch (error) {
         console.error('[handleSendNow] 发送失败 (catch块):', error);
         await customAlert(`发送失败: ${error.data?.message || error.message || '未知错误'}`);
@@ -1181,14 +1392,24 @@ async function handleSendNow() {
         console.log("[handleSendNow] 发送流程结束。");
     }
 }
+
 async function handleSaveTask() {
     console.log("[handleSaveTask] 尝试保存定时任务。");
     if (!selectedWebhookId) { await customAlert("请先选择一个发送配置。"); return; }
     const webhookConfig = webhooks.find(wh => wh.id === selectedWebhookId);
     if (!webhookConfig) { await customAlert("未找到选中的发送配置。"); return; }
 
-    const template = webhookUrlTemplates.find(t => t.id === webhookConfig.templateId);
-    if (!template) { await customAlert("请为此发送配置选择一个有效的地址模板。"); return; }
+    const selectedTemplateIdsFromUI = [];
+    if (multiTemplateSelectorContainer) {
+        multiTemplateSelectorContainer.querySelectorAll('.multi-template-checkbox:checked').forEach(checkbox => {
+            selectedTemplateIdsFromUI.push(checkbox.value);
+        });
+    }
+    const templateIdsToSchedule = selectedTemplateIdsFromUI.length > 0 ? selectedTemplateIdsFromUI : (webhookConfig.templateIds || []);
+
+    if (!Array.isArray(templateIdsToSchedule) || templateIdsToSchedule.length === 0) {
+        await customAlert("请为此发送配置选择至少一个有效的地址模板以创建定时任务。"); return;
+    }
 
     const scheduledDateTimeValue = scheduleDatetimeInput.value;
     if (!scheduledDateTimeValue) { await customAlert("请选择一个发送日期和时间。"); scheduleDatetimeInput.focus(); return; }
@@ -1198,60 +1419,95 @@ async function handleSaveTask() {
     }
 
     const recipientOrPhone = phoneNumberInput.value.trim();
-    const messageContent = webhookBodyTextarea.value.trim();
+    const messageContent = webhookBodyTextarea.value.trim(); 
 
-    if (template.type === 'workweixin') {
-        if (!recipientOrPhone) { await customAlert('企业微信模板需要接收者 (touser/@all) 以创建定时任务。'); phoneNumberInput.focus(); return; }
-        if (!messageContent && (template.workweixin_msgtype === 'text' || template.workweixin_msgtype === 'markdown')) {
-             await customAlert('请输入消息内容以创建定时任务。'); webhookBodyTextarea.focus(); return;
-        }
-    } else {
-        if (!template.url || template.url.trim() === '') { await customAlert('无法创建定时任务：所选地址模板没有有效的URL。'); return; }
-        if (isPhoneNumberRequired(template) && !recipientOrPhone) {
-             await customAlert('当前模板需要手机号码/目标参数才能创建定时任务，请输入。'); phoneNumberInput.focus(); return;
+    let needsRecipientInfoForTask = false;
+    let isAnyWorkWeixinForTask = false;
+    let isAnyGenericRequiringPhonePlaceholderForTask = false; 
+
+    for (const templateId of templateIdsToSchedule) {
+        const template = webhookUrlTemplates.find(t => t.id === templateId);
+        if (template) {
+            if (template.type === 'workweixin') {
+                isAnyWorkWeixinForTask = true;
+            }
+            if (isPhoneNumberRequiredForConfirmation(template)) { 
+                isAnyGenericRequiringPhonePlaceholderForTask = true;
+            }
+        } else {
+            await customAlert(`错误：找不到ID为 ${templateId} 的模板信息，无法创建定时任务。`);
+            return;
         }
     }
+    needsRecipientInfoForTask = isAnyWorkWeixinForTask || isAnyGenericRequiringPhonePlaceholderForTask;
+
+    if (needsRecipientInfoForTask && !recipientOrPhone) {
+        let alertMessage = "";
+        if (isAnyWorkWeixinForTask && isAnyGenericRequiringPhonePlaceholderForTask) {
+            alertMessage = "当前选中的模板组合中，部分模板需要手机号码/目标参数，部分企业微信模板需要接收者。请输入以创建定时任务。";
+        } else if (isAnyWorkWeixinForTask) {
+            alertMessage = "当前选中的企业微信模板需要接收者 (touser/@all)以创建定时任务，请输入。";
+        } else if (isAnyGenericRequiringPhonePlaceholderForTask) {
+            alertMessage = "当前选中的通用模板需要手机号码/目标参数以创建定时任务，请输入。";
+        }
+        await customAlert(alertMessage);
+        phoneNumberInput.focus();
+        return;
+    }
+
+    if (isAnyWorkWeixinForTask && !messageContent) {
+        const wwTextOrMarkdownSelected = templateIdsToSchedule.some(id => {
+            const t = webhookUrlTemplates.find(tmpl => tmpl.id === id);
+            return t && t.type === 'workweixin' && (t.workweixin_msgtype === 'text' || t.workweixin_msgtype === 'markdown');
+        });
+        if (wwTextOrMarkdownSelected) {
+             await customAlert('请输入消息内容以创建定时任务。'); webhookBodyTextarea.focus(); return;
+        }
+    }
+    
+    const hasGenericTemplateForTask = templateIdsToSchedule.some(id => {
+        const t = webhookUrlTemplates.find(tmpl => tmpl.id === id);
+        return t && t.type === 'generic';
+    });
+
+    if (hasGenericTemplateForTask) {
+        for (const templateId of templateIdsToSchedule) {
+            const template = webhookUrlTemplates.find(t => t.id === templateId);
+            if (template && template.type === 'generic') {
+                if (!template.url || template.url.trim() === '' || template.url === "WORKWEIXIN_APP_MESSAGE_API") { 
+                    await customAlert(`无法创建定时任务：模板 "${template.name}" 没有有效的通用URL。`); return; 
+                }
+            }
+        }
+    }
+
+    const webhookSnapshot = {
+        name: webhookConfig.name,
+        templateIds: templateIdsToSchedule, 
+        headers: webhookConfig.headers, 
+        plainBody: messageContent, 
+        phoneNumber: recipientOrPhone, 
+        touser: recipientOrPhone, 
+    };
+
+    const firstTemplateForTaskType = templateIdsToSchedule.length > 0 ? webhookUrlTemplates.find(t => t.id === templateIdsToSchedule[0]) : null;
 
     const taskPayloadForApi = {
         originalWebhookId: selectedWebhookId,
         scheduledTime: scheduledTime.toISOString(),
-        templateType: template.type,
-        webhookSnapshot: {
-            name: webhookConfig.name,
-            templateId: template.id,
-            method: template.method,
-            headers: webhookConfig.headers,
-            plainBody: messageContent,
-            phoneNumber: recipientOrPhone,
-            bodyTemplate: template.bodyTemplate,
-            url: template.url,
-            touser: recipientOrPhone,
-            workweixin_msgtype: template.workweixin_msgtype
-        },
-        finalUrl: null,
-        workweixinConfig: null
+        templateType: firstTemplateForTaskType ? firstTemplateForTaskType.type : null, 
+        webhookSnapshot: webhookSnapshot, 
+        finalUrl: null, 
+        workweixinConfig: null 
     };
-
-    if (template.type === 'generic') {
-        let finalUrl = template.url;
-        finalUrl = finalUrl.replace(/{phoneNumber}|{phone}/g, (recipientOrPhone || "").replace(/"/g, '\\"'));
-        taskPayloadForApi.finalUrl = finalUrl.trim();
-        delete taskPayloadForApi.webhookSnapshot.touser;
-        delete taskPayloadForApi.webhookSnapshot.workweixin_msgtype;
-    } else {
-        taskPayloadForApi.workweixinConfig = {
-            corpid: template.workweixin_corpid,
-            agentid: template.workweixin_agentid,
-            touser: recipientOrPhone,
-            msgtype: template.workweixin_msgtype
-        };
-        taskPayloadForApi.webhookSnapshot.url = "WORKWEIXIN_APP_MESSAGE_API";
-        delete taskPayloadForApi.webhookSnapshot.method;
-        delete taskPayloadForApi.webhookSnapshot.headers;
-        delete taskPayloadForApi.webhookSnapshot.bodyTemplate;
-        delete taskPayloadForApi.webhookSnapshot.phoneNumber;
+    
+    if (firstTemplateForTaskType && firstTemplateForTaskType.type === 'generic') {
+        let finalComputedUrl = firstTemplateForTaskType.url; 
+        finalComputedUrl = finalComputedUrl.replace(/{phoneNumber}|{phone}/g, (recipientOrPhone || "").replace(/"/g, '\\"'));
+        taskPayloadForApi.webhookSnapshot.firstTemplateFinalUrl_dev_note = finalComputedUrl.trim(); 
     }
-    console.log("[handleSaveTask] 发送给 /api/schedule-task 的负载:", JSON.stringify(taskPayloadForApi));
+
+    console.log("[handleSaveTask] 发送给 /api/schedule-task 的负载:", JSON.stringify(taskPayloadForApi, null, 2));
 
     try {
         const response = await apiRequest('/api/schedule-task', {
@@ -1261,11 +1517,11 @@ async function handleSaveTask() {
         console.log("[handleSaveTask] /api/schedule-task 响应:", response);
         if (response.success && response.taskId) {
             await customAlert(`定时任务已保存！\nID: ${response.taskId}\n计划时间: ${formatDate(taskPayloadForApi.scheduledTime)}`);
-            if(scheduleDatetimeInput) scheduleDatetimeInput.value = '';
-            if (response.scheduledTasks) {
+            if(scheduleDatetimeInput) scheduleDatetimeInput.value = ''; 
+            if (response.scheduledTasks) { 
                 scheduledTasks = response.scheduledTasks;
-            } else {
-                const data = await apiRequest('/api/data');
+            } else { 
+                const data = await apiRequest('/api/data'); 
                 if (data) scheduledTasks = data.scheduledTasks || [];
             }
             renderScheduledTaskList();
@@ -1277,9 +1533,10 @@ async function handleSaveTask() {
         await customAlert(`保存定时任务失败: ${error.data?.message || error.message || error}`);
     }
 }
+
 function renderHeaders(headersArray, listEl, keyClass, valueClass, removeClass, focusColor = 'indigo') {
     if (!listEl) return;
-    listEl.innerHTML = '';
+    listEl.innerHTML = ''; 
     (headersArray || []).forEach((header, index) => {
         const div = document.createElement('div');
         div.className = 'flex items-center space-x-2 mb-2 header-item';
@@ -1312,13 +1569,13 @@ function setActiveTab(tabName, forceRender = false) {
             tab.classList.toggle('text-white', isTabActive);
             tab.classList.toggle('text-gray-400', !isTabActive);
             tab.classList.toggle('border-transparent', !isTabActive);
+            if (!isTabActive) {
+                tab.classList.remove('border-indigo-500', 'border-teal-500');
+            }
         });
     } else {
         console.warn("[setActiveTab] editorTabs NodeList is null or empty.");
     }
-
-    console.log("[setActiveTab] About to define localPaneMap. DOM elements check:");
-    console.log({ tabContentBody, tabContentHeaders, tabContentSchedule, tabContentHistory });
 
     const localPaneMap = {
         body: tabContentBody,
@@ -1347,16 +1604,19 @@ function setActiveTab(tabName, forceRender = false) {
         const activePane = localPaneMap[tabName];
         if (activePane && typeof activePane.classList !== 'undefined') {
             activePane.classList.remove('hidden');
-            activePane.classList.add('flex', 'flex-col');
+            activePane.classList.add('flex', 'flex-col'); 
             console.log(`[setActiveTab] Active pane for tab '${tabName}' made visible.`);
 
             if (['body', 'headers', 'schedule', 'history'].includes(tabName)) {
-                activePane.classList.add('flex-grow');
+                activePane.classList.add('flex-grow'); 
             }
 
-            if (tabName === 'history') {
+
+            if (tabName === 'history' && selectedWebhookId) { 
                 console.log("[setActiveTab] Rendering history log for selected webhook:", selectedWebhookId);
                 renderHistoryLog(selectedWebhookId);
+            } else if (tabName === 'history' && !selectedWebhookId) {
+                 if (historyLogListEl) historyLogListEl.innerHTML = '<p class="text-center text-gray-400 py-8 text-sm">请先选择一个发送配置以查看历史。</p>';
             }
             if (tabName === 'schedule') {
                 console.log("[setActiveTab] Rendering scheduled task list.");
@@ -1379,13 +1639,12 @@ async function handleCancelTask(taskId) {
             console.log("[handleCancelTask] 后端取消响应:", response);
             if (response.success) {
                 await customAlert("定时任务已取消。");
-                if (response.scheduledTasks) {
+                if (response.scheduledTasks) { 
                     scheduledTasks = response.scheduledTasks;
-                } else {
-                    const data = await apiRequest('/api/data');
-                    if (data) scheduledTasks = data.scheduledTasks || [];
+                } else { 
+                    scheduledTasks = scheduledTasks.filter(task => task.id !== taskId);
                 }
-                renderScheduledTaskList();
+                renderScheduledTaskList(); 
             } else {
                 throw new Error(response.message || "取消任务失败");
             }
@@ -1408,58 +1667,90 @@ function renderHistoryLog(webhookIdToRender) {
         historyLogListEl.innerHTML = '<p class="text-center text-gray-400 py-8 text-sm">还没有发送记录</p>';
         return;
     }
-    logs.forEach(entry => {
+    logs.forEach(entry => { 
         const div = document.createElement('div');
         div.className = 'bg-[#1a1d24] p-3 rounded shadow-sm border border-gray-700/50';
-        let sClass = 'text-yellow-400', sText = '发送中... (状态未知)';
+        
+        let overallStatusClass = 'text-yellow-400';
+        let overallStatusText = '处理中...';
+
         if (entry.status === 'success') {
-            sClass = 'text-green-400';
-            sText = `成功 (${entry.response?.status || (entry.response?.data?.errcode === 0 ? '企微OK' : 'N/A')})`;
+            overallStatusClass = 'text-green-400';
+            overallStatusText = '全部成功';
+        } else if (entry.status === 'partial_success') {
+            overallStatusClass = 'text-yellow-400'; 
+            overallStatusText = '部分成功';
         } else if (entry.status === 'failure') {
-            sClass = 'text-red-400';
-            let errorCode = entry.error?.code || entry.error?.status || (entry.error?.data?.errcode);
-            if (errorCode === undefined && entry.error?.name === 'AxiosError' && !entry.error?.response) errorCode = "NET_ERR";
-            sText = `失败 (${errorCode || 'N/A'})`;
+            overallStatusClass = 'text-red-400';
+            overallStatusText = `全部失败 (${entry.error?.code || 'N/A'})`;
         }
+        
+        const configName = entry.request?.webhookConfigName || 'N/A';
+        const numTemplates = entry.request?.clientPayload?.templateIds?.length || entry.results?.length || 0;
+        const messagePreview = entry.request?.clientPayload?.plainBody || '(无内容)';
+        const shortMessagePreview = messagePreview.length > 20 ? messagePreview.substring(0, 20) + '...' : messagePreview;
 
-        const taskName = entry.request?.name || 'N/A';
-        const plainBodyContent = entry.request?.plainBody || entry.request?.body || '(未记录纯文本或非文本)';
-        const messagePreview = typeof plainBodyContent === 'string' ? (plainBodyContent.length > 20 ? plainBodyContent.substring(0, 20) + '...' : plainBodyContent) : '(非文本内容)';
+        let detailsHtml = `<p class="text-xs text-gray-400 mb-1">配置名称: <span class="text-gray-200">${configName}</span></p>`;
+        detailsHtml += `<p class="text-xs text-gray-400 mb-1">共尝试发送 ${numTemplates} 个模板。</p>`;
+        detailsHtml += `<h4 class="font-semibold mb-1 text-gray-300 text-xs mt-2">原始发送内容 (PlainBody):</h4>`;
+        detailsHtml += `<pre class="text-xs text-gray-400 whitespace-pre-wrap mb-2 bg-[#1e2128] p-1.5 rounded">${typeof messagePreview === 'string' ? messagePreview : '(非文本内容)'}</pre>`;
+        
+        if(entry.error && (!entry.results || entry.results.length === 0)) { 
+            detailsHtml += `<h4 class="font-semibold mb-1 text-gray-300 text-xs mt-2">顶层错误:</h4>`;
+            detailsHtml += `<pre class="text-xs text-gray-400 whitespace-pre-wrap bg-[#1e2128] p-1.5 rounded">${JSON.stringify(entry.error, null, 2)}</pre>`;
+        } else if (Array.isArray(entry.results)) {
+            detailsHtml += `<h4 class="font-semibold mb-1 text-gray-300 text-xs mt-2">各模板发送结果:</h4>`;
+            entry.results.forEach((templateResult, index) => {
+                let sClass = 'text-yellow-400', sText = '未知';
+                if (templateResult.status === 'success') {
+                    sClass = 'text-green-400'; sText = `成功 (${templateResult.response?.status || 'OK'})`;
+                } else if (templateResult.status === 'failure') {
+                    sClass = 'text-red-400'; sText = `失败 (${templateResult.error?.code || templateResult.error?.status || 'ERR'})`;
+                }
+                
+                const reqSnap = templateResult.requestSnapshot || {};
+                const respSnap = templateResult.response || templateResult.error || {};
 
-        const requestSnapshot = entry.request || {};
-        const responseSnapshot = entry.response || entry.error || {};
+                let tUrlDisp = "URL 未知", tUrlTitle = "URL 未知";
+                let actualUrlForTitle = reqSnap.decryptedOriginalUrl || reqSnap.urlForDisplay || "";
+                if (!actualUrlForTitle && reqSnap.templateType !== 'workweixin' && reqSnap.url) {
+                    actualUrlForTitle = reqSnap.url; 
+                } else if (reqSnap.templateType === 'workweixin' || (reqSnap.url && reqSnap.url.startsWith("WORKWEIXIN"))) {
+                    actualUrlForTitle = "企业微信接口 (自动处理)";
+                }
 
-        let urlToDisplayInHistory = "URL 未知";
-        let urlTitleForHistory = "URL 未知";
 
-        let actualUrlForTitle = "";
-        if (requestSnapshot.urlForDisplay) {
-            actualUrlForTitle = requestSnapshot.urlForDisplay;
-        } else if (requestSnapshot.webhookSnapshot && requestSnapshot.webhookSnapshot.decryptedOriginalUrl) {
-            actualUrlForTitle = requestSnapshot.webhookSnapshot.decryptedOriginalUrl;
-        } else if (requestSnapshot.templateType === 'workweixin') {
-            actualUrlForTitle = "企业微信接口 (自动处理)";
+                if (currentUser.role !== 'admin' && reqSnap.templateType !== 'workweixin') {
+                    tUrlDisp = "[URL隐藏]"; tUrlTitle = "[URL隐藏]";
+                } else {
+                    const dUrl = getDisplayableUrl(actualUrlForTitle, reqSnap.templateType === 'workweixin');
+                    tUrlDisp = dUrl.text;
+                    if (currentUser.role !== 'admin' && reqSnap.templateType !== 'workweixin' && dUrl.text !== actualUrlForTitle) {
+                         tUrlTitle = dUrl.text;
+                    } else {
+                         tUrlTitle = dUrl.title;
+                    }
+                }
+
+
+                detailsHtml += `
+                    <div class="mb-2 p-1.5 bg-[#1e2128] rounded border border-gray-600/50">
+                        <p class="text-xs text-gray-300">模板 ${index + 1}: <span class="font-medium">${reqSnap.templateName || templateResult.templateId}</span> - <span class="${sClass}">${sText}</span></p>
+                        <details class="text-xs mt-1">
+                            <summary class="cursor-pointer text-gray-500 hover:text-gray-300">查看详情</summary>
+                            <pre class="text-gray-400 whitespace-pre-wrap mt-1 bg-black/20 p-1 rounded" title="${tUrlTitle}">URL: ${tUrlDisp}\nMethod: ${reqSnap.method || 'N/A'}\nHeaders: ${JSON.stringify(reqSnap.headers, null, 2)}\nActual Sent Body: ${typeof reqSnap.actualSentBody === 'object' ? JSON.stringify(reqSnap.actualSentBody, null, 2) : (reqSnap.actualSentBody || '(空)')}</pre>
+                            <pre class="text-gray-400 whitespace-pre-wrap mt-1 bg-black/20 p-1 rounded">Response/Error: ${JSON.stringify(respSnap, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            });
         }
-
-        if (currentUser && currentUser.role !== 'admin' && requestSnapshot.templateType !== 'workweixin') {
-            urlToDisplayInHistory = "[URL对普通用户隐藏]";
-            urlTitleForHistory = "[URL对普通用户隐藏]";
-        } else {
-            const displayable = getDisplayableUrl(actualUrlForTitle, requestSnapshot.templateType === 'workweixin');
-            urlToDisplayInHistory = displayable.text;
-            if (currentUser && currentUser.role !== 'admin' && requestSnapshot.templateType !== 'workweixin') {
-                 urlTitleForHistory = displayable.text;
-            } else {
-                 urlTitleForHistory = displayable.title;
-            }
-        }
-
 
         div.innerHTML = `
             <div class="flex justify-between items-center cursor-pointer history-log-header">
                 <div class="flex items-center flex-grow min-w-0">
-                    <span class="font-semibold text-sm ${sClass} flex-shrink-0 mr-2">● ${sText}</span>
-                    <span class="text-xs text-gray-300 truncate" style="max-width: 200px;" title="${typeof plainBodyContent === 'string' ? plainBodyContent : '(非文本内容)'}">${messagePreview}</span>
+                    <span class="font-semibold text-sm ${overallStatusClass} flex-shrink-0 mr-2">● ${overallStatusText}</span>
+                    <span class="text-xs text-gray-300 truncate" style="max-width: 200px;" title="${messagePreview}">${shortMessagePreview} (${numTemplates}模板)</span>
                 </div>
                 <div class="flex items-center flex-shrink-0 ml-2">
                     <span class="text-xs text-gray-500">${formatDate(entry.timestamp)}</span>
@@ -1467,13 +1758,7 @@ function renderHistoryLog(webhookIdToRender) {
                 </div>
             </div>
             <div class="history-details mt-3 pt-3 border-t border-gray-700 hidden bg-black/20 p-2 rounded max-h-96 overflow-y-auto">
-                <p class="text-xs text-gray-400 mb-1">配置名称: <span class="text-gray-200">${taskName}</span></p>
-                <h4 class="font-semibold mb-1 text-gray-300 text-xs mt-2">原始发送内容 (PlainBody):</h4>
-                <pre class="text-xs text-gray-400 whitespace-pre-wrap mb-2 bg-[#1e2128] p-1.5 rounded">${typeof plainBodyContent === 'string' ? plainBodyContent : '(非文本内容)'}</pre>
-                <h4 class="font-semibold mb-1 text-gray-300 text-xs mt-2">请求详情 (快照):</h4>
-                <pre class="text-xs text-gray-400 whitespace-pre-wrap mb-2 bg-[#1e2128] p-1.5 rounded" title="${urlTitleForHistory}">URL: ${urlToDisplayInHistory}\nMethod: ${requestSnapshot.method || 'N/A'}\nHeaders: ${JSON.stringify(requestSnapshot.headers, null, 2)}\nActual Sent Body: ${typeof requestSnapshot.actualSentBody === 'object' ? JSON.stringify(requestSnapshot.actualSentBody, null, 2) : (requestSnapshot.actualSentBody || '(空或非JSON)')}</pre>
-                <h4 class="font-semibold mb-1 text-gray-300 text-xs mt-2">响应/错误详情:</h4>
-                <pre class="text-xs text-gray-400 whitespace-pre-wrap bg-[#1e2128] p-1.5 rounded">${JSON.stringify(responseSnapshot, null, 2)}</pre>
+                ${detailsHtml}
             </div>`;
         historyLogListEl.appendChild(div);
     });
@@ -1499,23 +1784,34 @@ function renderScheduledTaskList() {
 
         const configName = task.webhookSnapshot?.name || '基于未知配置';
         const originalWhId = task.originalWebhookId || '未知ID';
+        const numTemplatesInTask = task.webhookSnapshot?.templateIds?.length || 0;
 
         let displayIdentifier = "目标未知";
         let titleForIdentifier = "目标未知";
-
-        if (task.templateType === 'workweixin') {
-            const touser = task.webhookSnapshot?.touser || task.workweixinConfig?.touser || "未指定接收者";
-            displayIdentifier = `企微接收: ${touser}`;
-            titleForIdentifier = `企业微信任务，接收者: ${touser}`;
-        } else if (task.finalUrl) {
-            if (currentUser && currentUser.role !== 'admin') {
-                const displayable = getDisplayableUrl(task.finalUrl, false);
-                displayIdentifier = `URL: ${displayable.text}`;
-                titleForIdentifier = displayable.text;
-            } else {
-                const displayableUrlInfo = getDisplayableUrl(task.finalUrl, false);
-                displayIdentifier = `URL: ${displayableUrlInfo.text}`;
-                titleForIdentifier = displayableUrlInfo.title;
+        let primaryTaskType = task.templateType; 
+        
+        if (numTemplatesInTask > 0 && task.webhookSnapshot?.templateIds) {
+            const firstTemplateIdInTask = task.webhookSnapshot.templateIds[0];
+            const firstTemplateObject = webhookUrlTemplates.find(t => t.id === firstTemplateIdInTask);
+            
+            if (firstTemplateObject) {
+                primaryTaskType = firstTemplateObject.type; 
+                if (primaryTaskType === 'workweixin') {
+                    const touser = task.webhookSnapshot?.touser || "未指定接收者";
+                    displayIdentifier = `企微接收: ${touser}`;
+                    titleForIdentifier = `企业微信任务，接收者: ${touser}`;
+                } else if (currentUser.role === 'admin' && task.finalUrl) { 
+                    const displayableUrlInfo = getDisplayableUrl(task.finalUrl, false); // task.finalUrl is pre-decrypted
+                    displayIdentifier = `URL: ${displayableUrlInfo.text}`;
+                    titleForIdentifier = displayableUrlInfo.title;
+                } else if (currentUser.role === 'admin' && firstTemplateObject.url) { 
+                    const displayableUrlInfo = getDisplayableUrl(firstTemplateObject.url, false); // template.url is pre-decrypted
+                     displayIdentifier = `URL: ${displayableUrlInfo.text}`;
+                     titleForIdentifier = displayableUrlInfo.title;
+                } else if (primaryTaskType === 'generic') { 
+                    displayIdentifier = "通用类型任务";
+                    titleForIdentifier = "通用类型任务 (URL对普通用户隐藏)";
+                }
             }
         }
 
@@ -1526,8 +1822,8 @@ function renderScheduledTaskList() {
 
         taskInfo.innerHTML = `
             <p class="text-sm text-gray-200 font-semibold truncate" title="基于配置: ${configName} (ID: ${originalWhId})">发送到: <span class="font-normal">${configName}</span></p>
-            <p class="text-xs text-indigo-300 truncate" title="${titleForIdentifier}">目标: <span class="font-normal text-gray-400">${displayIdentifier}</span></p>
-            <p class="text-xs text-gray-400">计划时间: ${formatDate(task.scheduledTime)}</p>
+            <p class="text-xs text-indigo-300 truncate" title="${titleForIdentifier}">主要目标: <span class="font-normal text-gray-400">${displayIdentifier}</span></p>
+            <p class="text-xs text-gray-400">计划时间: ${formatDate(task.scheduledTime)} (${numTemplatesInTask}个模板)</p>
             <p class="text-xs text-gray-500 truncate" title="${fullContentPreview}">内容: ${contentPreview}</p>
         `;
 
@@ -1548,8 +1844,8 @@ async function fetchAndRenderUsers() {
     if (!currentUser || currentUser.role !== 'admin' || !userListContainer) return;
     userListContainer.innerHTML = '<p class="text-center text-gray-500">正在加载用户列表...</p>';
     try {
-        const users = await apiRequest('/api/users');
-        usersList = users || [];
+        const users = await apiRequest('/api/users'); 
+        usersList = users || []; 
         renderUserList();
     } catch (error) {
         console.error("获取用户列表失败:", error);
@@ -1559,7 +1855,7 @@ async function fetchAndRenderUsers() {
 function renderUserList() {
     console.log("[renderUserList] 开始渲染用户列表。");
     if (!userListContainer || !currentUser || currentUser.role !== 'admin') return;
-    userListContainer.innerHTML = '';
+    userListContainer.innerHTML = ''; 
 
     if (usersList.length === 0) {
         userListContainer.innerHTML = '<p class="text-center text-gray-500 py-4">系统中没有其他用户。</p>';
@@ -1571,33 +1867,130 @@ function renderUserList() {
     usersList.forEach(user => {
         const li = document.createElement('li');
         li.className = 'bg-[#2f3241] p-3 rounded shadow-sm flex justify-between items-center';
-        li.innerHTML = `
-            <div>
-                <p class="text-sm font-semibold text-gray-100">${user.username} <span class="text-xs text-gray-400">(${user.role})</span></p>
-                <p class="text-xs text-gray-500">ID: ${user.id}</p>
-                ${user.mustChangePassword ? '<p class="text-xs text-yellow-400">需修改密码</p>' : ''}
-            </div>
-            <div>
-                ${currentUser.id !== user.id && user.username !== 'admin' ?
-                `<button data-user-id="${user.id}" data-username="${user.username}" class="delete-user-btn text-red-500 hover:text-red-400 text-xs py-1 px-2 rounded hover:bg-red-500/20">删除</button>`
-                : (currentUser.id === user.id ? '<span class="text-xs text-gray-600">(当前用户)</span>' : (user.username === 'admin' ? '<span class="text-xs text-gray-600">(系统管理员)</span>' : ''))
-                }
-            </div>
+        
+        let lockoutInfoHtml = '';
+        const now = new Date();
+        let isLocked = false;
+        if (user.lockoutUntil) {
+            const lockoutEndDate = new Date(user.lockoutUntil);
+            if (lockoutEndDate > now) {
+                isLocked = true;
+                const minutesRemaining = Math.ceil((lockoutEndDate.getTime() - now.getTime()) / (1000 * 60));
+                lockoutInfoHtml = `<p class="text-xs text-orange-400">账户已锁定 (约剩 ${minutesRemaining} 分钟，至 ${lockoutEndDate.toLocaleString('zh-CN')})</p>`;
+            }
+        }
+
+        const userInfoDiv = document.createElement('div');
+        userInfoDiv.innerHTML = `
+            <p class="text-sm font-semibold text-gray-100">${user.username} <span class="text-xs text-gray-400">(${user.role})</span></p>
+            <p class="text-xs text-gray-500">ID: ${user.id}</p>
+            ${user.mustChangePassword ? '<p class="text-xs text-yellow-400">需修改密码</p>' : ''}
+            ${lockoutInfoHtml} 
+            ${user.failedLoginAttempts > 0 && !isLocked ? `<p class="text-xs text-yellow-600">登录失败次数: ${user.failedLoginAttempts}</p>` : ''}
         `;
+
+        const userActionsDiv = document.createElement('div');
+        userActionsDiv.className = 'space-x-2 flex-shrink-0';
+
+        if (currentUser.id !== user.id && user.username !== 'admin') { 
+            const changePassBtn = document.createElement('button');
+            changePassBtn.dataset.userId = user.id;
+            changePassBtn.dataset.username = user.username;
+            changePassBtn.className = 'admin-change-user-password-btn text-indigo-400 hover:text-indigo-300 text-xs py-1 px-2 rounded hover:bg-indigo-500/20';
+            changePassBtn.textContent = '改密';
+            userActionsDiv.appendChild(changePassBtn);
+
+            if (isLocked) {
+                const unlockBtn = document.createElement('button');
+                unlockBtn.dataset.userId = user.id;
+                unlockBtn.dataset.username = user.username;
+                unlockBtn.className = 'admin-unlock-user-btn text-green-400 hover:text-green-300 text-xs py-1 px-2 rounded hover:bg-green-500/20';
+                unlockBtn.textContent = '解锁';
+                userActionsDiv.appendChild(unlockBtn);
+            }
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.dataset.userId = user.id;
+            deleteBtn.dataset.username = user.username;
+            deleteBtn.className = 'delete-user-btn text-red-500 hover:text-red-400 text-xs py-1 px-2 rounded hover:bg-red-500/20';
+            deleteBtn.textContent = '删除';
+            userActionsDiv.appendChild(deleteBtn);
+
+        } else if (currentUser.id === user.id) {
+            const selfSpan = document.createElement('span');
+            selfSpan.className = 'text-xs text-gray-600';
+            selfSpan.textContent = '(当前用户)';
+            userActionsDiv.appendChild(selfSpan);
+        } else if (user.username === 'admin') {
+            if (isLocked) {
+                const unlockBtn = document.createElement('button');
+                unlockBtn.dataset.userId = user.id;
+                unlockBtn.dataset.username = user.username;
+                unlockBtn.className = 'admin-unlock-user-btn text-green-400 hover:text-green-300 text-xs py-1 px-2 rounded hover:bg-green-500/20';
+                unlockBtn.textContent = '解锁Admin'; 
+                userActionsDiv.appendChild(unlockBtn);
+            } else {
+                const sysAdminSpan = document.createElement('span');
+                sysAdminSpan.className = 'text-xs text-gray-600';
+                sysAdminSpan.textContent = '(系统管理员)';
+                userActionsDiv.appendChild(sysAdminSpan);
+            }
+        }
+        
+        li.appendChild(userInfoDiv);
+        li.appendChild(userActionsDiv);
         ul.appendChild(li);
     });
     userListContainer.appendChild(ul);
 
     ul.querySelectorAll('.delete-user-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
-            const userIdToDelete = e.target.dataset.userId;
-            const usernameToDelete = e.target.dataset.username;
+            const userIdToDelete = e.currentTarget.dataset.userId; 
+            const usernameToDelete = e.currentTarget.dataset.username;
             if (await customConfirm(`确定要删除用户 "${usernameToDelete}" (ID: ${userIdToDelete}) 吗？此操作不可撤销，且会删除该用户的所有相关数据！`, "删除用户确认")) {
                 handleDeleteUser(userIdToDelete);
             }
         });
     });
+    ul.querySelectorAll('.admin-change-user-password-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const userIdToChange = e.currentTarget.dataset.userId;
+            const usernameToChange = e.currentTarget.dataset.username;
+            handleShowAdminChangePasswordModal(userIdToChange, usernameToChange);
+        });
+    });
+    ul.querySelectorAll('.admin-unlock-user-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const userIdToUnlock = e.currentTarget.dataset.userId;
+            const usernameToUnlock = e.currentTarget.dataset.username;
+            if (await customConfirm(`确定要为用户 "${usernameToUnlock}" (ID: ${userIdToUnlock}) 解锁账户吗？`, "解锁用户确认")) {
+                handleAdminUnlockUser(userIdToUnlock);
+            }
+        });
+    });
 }
+
+async function handleAdminUnlockUser(userIdToUnlock) {
+    console.log(`[handleAdminUnlockUser] 管理员尝试解锁用户ID: ${userIdToUnlock}`);
+    if (!currentUser || currentUser.role !== 'admin') {
+        customAlert("权限不足。");
+        return;
+    }
+    try {
+        const response = await apiRequest(`/api/users/${userIdToUnlock}/unlock`, { method: 'POST' });
+        if (response.success) {
+            await customAlert(response.message || "用户已成功解锁。");
+            await fetchAndRenderUsers(); 
+        } else {
+            throw new Error(response.message || "解锁用户失败 (来自后端)");
+        }
+    } catch (error) {
+        console.error("解锁用户失败:", error);
+        await customAlert(`解锁用户失败: ${error.data?.message || error.message || '未知错误'}`);
+    }
+}
+
+
 async function handleShowAddUserForm() {
     console.log("[handleShowAddUserForm] 显示添加用户表单。");
     if (!currentUser || currentUser.role !== 'admin') return;
@@ -1633,44 +2026,107 @@ async function handleAddUserFormSubmit(event) {
     }
 
     try {
-        const response = await apiRequest('/api/users', {
+        const response = await apiRequest('/api/users', { 
             method: 'POST',
             body: JSON.stringify({ username, password, role })
         });
-        if (response.success || response.user) {
+        if (response.success || response.user) { 
             await customAlert(`用户 "${username}" 创建成功！新用户首次登录时需要修改密码。`);
             handleHideAddUserForm();
-            await fetchAndRenderUsers();
+            await fetchAndRenderUsers(); 
         } else {
             throw new Error(response.message || "创建用户失败");
         }
     } catch (error) {
         console.error("创建用户失败:", error);
-        await customAlert(`创建用户失败: ${error.data?.message || error.message || error}`);
+        await customAlert(`创建用户失败: ${error.data?.message || error.message || '未知错误'}`);
     }
 }
 async function handleDeleteUser(userIdToDelete) {
     console.log(`[handleDeleteUser] 删除用户ID: ${userIdToDelete}`);
-    if (!currentUser || currentUser.role !== 'admin') return;
+    if (!currentUser || currentUser.role !== 'admin') return; 
     try {
-        const response = await apiRequest(`/api/users/${userIdToDelete}`, { method: 'DELETE' });
+        const response = await apiRequest(`/api/users/${userIdToDelete}`, { method: 'DELETE' }); 
         if (response.success) {
             await customAlert(response.message || "用户已删除。");
-            await fetchAndRenderUsers();
+            await fetchAndRenderUsers(); 
         } else {
             throw new Error(response.message || "删除用户失败");
         }
     } catch (error) {
         console.error("删除用户失败:", error);
-        await customAlert(`删除用户失败: ${error.data?.message || error.message || error}`);
+        await customAlert(`删除用户失败: ${error.data?.message || error.message || '未知错误'}`);
     }
 }
+function handleShowAdminChangePasswordModal(userId, username) {
+    console.log(`[handleShowAdminChangePasswordModal] 为用户 ${username} (ID: ${userId}) 显示修改密码模态框`);
+    if (!adminChangePasswordModal || !adminTargetUsernameSpan || !adminNewPasswordInput || !adminConfirmNewPasswordInput) {
+        console.error("管理员修改密码模态框的某些元素未找到。");
+        customAlert("无法打开修改密码对话框：界面元素缺失。");
+        return;
+    }
+    currentEditingUserIdForPasswordChange = userId;
+    adminTargetUsernameSpan.textContent = username;
+    adminNewPasswordInput.value = '';
+    adminConfirmNewPasswordInput.value = '';
+    adminChangePasswordModal.classList.remove('hidden');
+    adminChangePasswordModal.classList.add('flex');
+}
+function handleHideAdminChangePasswordModal() {
+    if (adminChangePasswordModal) {
+        adminChangePasswordModal.classList.add('hidden');
+        adminChangePasswordModal.classList.remove('flex');
+    }
+    currentEditingUserIdForPasswordChange = null;
+    if(adminNewPasswordInput) adminNewPasswordInput.value = '';
+    if(adminConfirmNewPasswordInput) adminConfirmNewPasswordInput.value = '';
+}
+async function handleAdminChangePasswordFormSubmit(event) {
+    event.preventDefault();
+    if (!currentEditingUserIdForPasswordChange || !adminNewPasswordInput || !adminConfirmNewPasswordInput) return;
 
+    const newPassword = adminNewPasswordInput.value;
+    const confirmNewPassword = adminConfirmNewPasswordInput.value;
+
+    if (!newPassword || newPassword.length < 6) {
+        await customAlert("新密码不能为空且长度至少为6位。");
+        adminNewPasswordInput.focus();
+        return;
+    }
+    if (newPassword !== confirmNewPassword) {
+        await customAlert("两次输入的密码不匹配。");
+        adminConfirmNewPasswordInput.focus();
+        return;
+    }
+
+    if(adminSubmitChangePasswordBtn) {
+        adminSubmitChangePasswordBtn.disabled = true;
+        adminSubmitChangePasswordBtn.textContent = '处理中...';
+    }
+
+    try {
+        const response = await apiRequest(`/api/auth/admin/change-user-password/${currentEditingUserIdForPasswordChange}`, {
+            method: 'POST',
+            body: JSON.stringify({ newPassword })
+        });
+        await customAlert(response.message || `用户密码已修改成功。该用户下次登录时需要设置新密码。`);
+        handleHideAdminChangePasswordModal();
+        await fetchAndRenderUsers(); 
+    } catch (error) {
+        console.error("管理员修改用户密码失败:", error);
+        await customAlert(`修改密码失败: ${error.data?.message || error.message || '未知错误'}`);
+    } finally {
+        if(adminSubmitChangePasswordBtn) {
+             adminSubmitChangePasswordBtn.disabled = false;
+             adminSubmitChangePasswordBtn.textContent = '确认修改';
+        }
+    }
+}
 
 // --- 应用初始化 ---
 async function initApp() {
     console.log("[App] initApp: 开始初始化...");
-    window.getUUID = function() { return crypto.randomUUID(); };
+    window.getUUID = function() { return crypto.randomUUID(); }; 
 
     try {
         const userData = await apiRequest('/api/auth/me');
@@ -1683,12 +2139,12 @@ async function initApp() {
                 console.warn('[App] initApp: 用户需要修改密码，重定向。');
                 sessionStorage.setItem('forcePasswordChange', 'true');
                 window.location.href = '/change-password.html';
-                return;
+                return; 
             }
         } else {
             console.warn('[App] initApp: 未能获取用户信息或用户未认证，重定向到登录页。');
             window.location.href = '/login.html';
-            return;
+            return; 
         }
     } catch (error) {
         console.error('[App] initApp: 认证检查时发生错误:', error.message);
@@ -1697,7 +2153,7 @@ async function initApp() {
                 window.location.href = '/login.html?reason=app_init_failed_auth_check';
              }
         }
-        return;
+        return; 
     }
 
     console.log("[App] initApp: 用户已认证，继续UI设置。");
@@ -1705,14 +2161,16 @@ async function initApp() {
         if (navTemplateViewBtn) navTemplateViewBtn.classList.add('hidden');
         if (navUserManagementBtn) navUserManagementBtn.classList.add('hidden');
         if (newTemplateBtn) newTemplateBtn.classList.add('hidden');
-        const globalCheckboxContainer = document.getElementById('template-is-global-container');
-        if(globalCheckboxContainer) globalCheckboxContainer.classList.add('hidden');
-
+        if(templateAccessControlContainer) templateAccessControlContainer.classList.add('hidden');
+        if(showAddUserFormBtnMain) showAddUserFormBtnMain.classList.add('hidden');
+        const showAddUserFormBtnSidebar = document.getElementById('show-add-user-form-btn');
+        if(showAddUserFormBtnSidebar) showAddUserFormBtnSidebar.classList.add('hidden');
     } else if (currentUser && currentUser.role === 'admin') {
         if (navTemplateViewBtn) navTemplateViewBtn.classList.remove('hidden');
         if (navUserManagementBtn) navUserManagementBtn.classList.remove('hidden');
-         const globalCheckboxContainer = document.getElementById('template-is-global-container');
-        if(globalCheckboxContainer) globalCheckboxContainer.classList.remove('hidden');
+        if(showAddUserFormBtnMain) showAddUserFormBtnMain.classList.remove('hidden');
+        const showAddUserFormBtnSidebar = document.getElementById('show-add-user-form-btn');
+        if(showAddUserFormBtnSidebar) showAddUserFormBtnSidebar.classList.remove('hidden');
     }
     console.log("[App] initApp: UI角色调整完成。");
 
@@ -1758,13 +2216,37 @@ async function initApp() {
     if(closeAboutViewBtn) closeAboutViewBtn.addEventListener('click', () => { console.log('[Event] 点击关闭关于按钮'); showView(currentView); });
 
     if (currentUser.role === 'admin') {
-        if(templateTypeSelect) templateTypeSelect.addEventListener('change', () => { console.log('[Event] 模板类型更改'); renderTemplateEditor(); });
+        if(templateTypeSelect) {
+            templateTypeSelect.addEventListener('change', () => { 
+                console.log('[Event] 模板类型更改'); 
+                updateTemplateEditorUIForType(templateTypeSelect.value); 
+                renderTemplateEditor(); 
+            });
+        }
+        if(templateIsGlobalCheckbox) {
+            templateIsGlobalCheckbox.addEventListener('change', () => {
+                if (templateAllowedUsersContainer && templateTypeSelect.value === 'generic') { 
+                    templateAllowedUsersContainer.classList.toggle('hidden', templateIsGlobalCheckbox.checked);
+                }
+                if (templateTypeSelect.value === 'generic' && !templateIsGlobalCheckbox.checked) {
+                    const template = webhookUrlTemplates.find(t => t.id === selectedTemplateId);
+                    const currentAllowedIds = !selectedTemplateId ? [] : (template ? (template.allowedUserIds || []) : []);
+                    renderAllowedUsersSelector(currentAllowedIds);
+                }
+            });
+        }
+
         if(newTemplateBtn) newTemplateBtn.addEventListener('click', handleNewTemplate);
         if(templateListEl) templateListEl.addEventListener('click', async e => {
             console.log('[Event] 点击模板列表项。目标:', e.target);
-            const deleteBtn = e.target.closest('.delete-template-btn');
+            const deleteBtn = e.target.closest('.delete-template-btn'); 
             const listItem = e.target.closest('li[data-id]');
-            if (deleteBtn) { e.stopPropagation(); console.log(`[Event] 点击删除模板按钮，ID: ${deleteBtn.dataset.deleteId}`); await handleDeleteTemplate(deleteBtn.dataset.deleteId); }
+            if (deleteBtn) { 
+                e.stopPropagation(); 
+                const templateId = deleteBtn.dataset.templateId; 
+                console.log(`[Event] 点击删除模板按钮，ID: ${templateId}`); 
+                await handleDeleteTemplate(templateId); 
+            }
             else if (listItem) { console.log(`[Event] 点击选择模板列表项，ID: ${listItem.dataset.id}`); await handleSelectTemplate(listItem.dataset.id); }
         });
         if(saveTemplateBtn) saveTemplateBtn.addEventListener('click', () => { console.log('[Event] 点击保存模板按钮'); saveCurrentTemplateChanges(false);});
@@ -1778,29 +2260,29 @@ async function initApp() {
                 if(!template.headers) template.headers = [];
                 template.headers.push({key: '', value: ''});
                 renderTemplateEditor();
-            } else if (isNewGeneric) {
+            } else if (isNewGeneric) { 
                 const headersContainer = document.getElementById('template-headers-list');
                 if (headersContainer) {
                      const div = document.createElement('div');
                      div.className = 'flex items-center space-x-2 mb-2 header-item';
-                     div.innerHTML = `<input type="text" value="" placeholder="Key" class="template-header-key w-1/3 bg-[#1a1d24] border border-gray-600 rounded px-3 py-1.5 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"><input type="text" value="" placeholder="Value" class="template-header-value flex-grow bg-[#1a1d24] border border-gray-600 rounded px-3 py-1.5 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"><button class="remove-template-header-btn text-red-500 hover:text-red-400 focus:outline-none p-1 rounded hover:bg-red-500/20 transition-colors">&#x2715;</button>`;
+                     div.innerHTML = `<input type="text" value="" placeholder="Key" class="template-header-key w-1/3 bg-[#1a1d24] border border-gray-600 rounded px-3 py-1.5 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"><input type="text" value="" placeholder="Value" class="template-header-value flex-grow bg-[#1a1d24] border border-gray-600 rounded px-3 py-1.5 text-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"><button data-header-index="${headersContainer.children.length}" class="remove-template-header-btn text-red-500 hover:text-red-400 focus:outline-none p-1 rounded hover:bg-red-500/20 transition-colors">&#x2715;</button>`;
                      headersContainer.appendChild(div);
                 }
             } else if (template && template.type !== 'generic') {
                 customAlert("请求头仅适用于通用类型模板。");
-            } else {
-                 customAlert("请先选择或保存一个通用类型模板。");
+            } else { 
+                 customAlert("请先选择或开始创建一个通用类型模板。");
             }
         });
         if(templateHeadersListEl) templateHeadersListEl.addEventListener('click', e => {
             const btn = e.target.closest('.remove-template-header-btn');
             if (btn) {
                 console.log('[Event] 点击模板编辑器中的移除请求头按钮');
-                const index = parseInt(btn.dataset.headerIndex, 10);
+                const indexToRemove = parseInt(btn.dataset.headerIndex, 10);
                 const template = webhookUrlTemplates.find(t => t.id === selectedTemplateId);
-                if (template && template.type === 'generic' && template.headers && !isNaN(index) && index >= 0 && index < template.headers.length) {
-                    template.headers.splice(index, 1);
-                    renderTemplateEditor();
+                if (template && template.type === 'generic' && template.headers && !isNaN(indexToRemove) && indexToRemove >= 0 && indexToRemove < template.headers.length) {
+                    template.headers.splice(indexToRemove, 1);
+                    renderTemplateEditor(); 
                 } else if (!template && selectedTemplateId === null && templateTypeSelect && templateTypeSelect.value === 'generic') {
                     const itemToRemove = btn.closest('.header-item');
                     if (itemToRemove) itemToRemove.remove();
@@ -1812,22 +2294,36 @@ async function initApp() {
     if(newWebhookBtn) newWebhookBtn.addEventListener('click', handleNewWebhook);
     if(webhookListEl) webhookListEl.addEventListener('click', async e => {
         console.log('[Event] 点击发送配置列表项。目标:', e.target);
-        const deleteBtn = e.target.closest('.delete-webhook-btn');
+        const deleteBtn = e.target.closest('.delete-webhook-btn'); 
         const listItem = e.target.closest('li[data-id]');
-        if (deleteBtn) { e.stopPropagation(); console.log(`[Event] 点击删除发送配置按钮，ID: ${deleteBtn.dataset.deleteId}`); await handleDeleteWebhook(deleteBtn.dataset.deleteId); }
+        if (deleteBtn) { 
+            e.stopPropagation(); 
+            const webhookId = deleteBtn.dataset.webhookId; 
+            console.log(`[Event] 点击删除发送配置按钮，ID: ${webhookId}`); 
+            await handleDeleteWebhook(webhookId); 
+        }
         else if (listItem) { console.log(`[Event] 点击选择发送配置列表项，ID: ${listItem.dataset.id}`); await handleSelectWebhook(listItem.dataset.id); }
     });
-    if(templateSelect) templateSelect.addEventListener('change', async () => {
-        console.log('[Event] 发送配置中的模板选择器更改。');
-        if (selectedWebhookId) {
-            const webhook = webhooks.find(wh => wh.id === selectedWebhookId);
-            if (webhook) {
-                webhook.templateId = templateSelect.value || null;
-                await saveCurrentWebhookChanges(true);
-                renderWebhookEditor();
+    if (multiTemplateSelectorContainer) {
+        multiTemplateSelectorContainer.addEventListener('change', async (event) => {
+            if (event.target.classList.contains('multi-template-checkbox')) {
+                console.log('[Event] Webhook 编辑器中的多模板选择发生更改。');
+                if (selectedWebhookId) {
+                    const webhook = webhooks.find(wh => wh.id === selectedWebhookId);
+                    if (webhook) {
+                        const selectedIds = [];
+                        multiTemplateSelectorContainer.querySelectorAll('.multi-template-checkbox:checked').forEach(cb => {
+                            selectedIds.push(cb.value);
+                        });
+                        webhook.templateIds = selectedIds;
+                        renderWebhookEditor(); 
+                    }
+                }
             }
-        }
-    });
+        });
+    }
+
+
     const urlVisibilityToggle = document.getElementById('toggle-url-visibility-btn');
     if (urlVisibilityToggle) {
         urlVisibilityToggle.addEventListener('click', () => {
@@ -1835,16 +2331,22 @@ async function initApp() {
             const urlDisplay = document.getElementById('selected-template-url-display');
             if (!urlDisplay) return;
             const isMasked = urlDisplay.dataset.isMasked === 'true';
-            const fullUrl = urlDisplay.dataset.fullUrl;
-            const template = webhookUrlTemplates.find(t => t.id === templateSelect.value);
-            const isWW = template && template.type === 'workweixin';
+            const fullUrl = urlDisplay.dataset.fullUrl; 
+            
+            let isWW = false; 
+            const currentWebhook = webhooks.find(wh => wh.id === selectedWebhookId);
+            if (currentWebhook && currentWebhook.templateIds && currentWebhook.templateIds.length > 0) {
+                const firstTemplate = webhookUrlTemplates.find(t => t.id === currentWebhook.templateIds[0]);
+                if (firstTemplate) isWW = firstTemplate.type === 'workweixin';
+            }
+
 
             if (isMasked) {
                 urlDisplay.textContent = fullUrl;
                 urlDisplay.dataset.isMasked = 'false';
                 urlVisibilityToggle.innerHTML = eyeSlashIconSVG;
-            } else {
-                const displayInfo = getDisplayableUrl(fullUrl, isWW);
+            } else { 
+                const displayInfo = getDisplayableUrl(fullUrl, isWW); 
                 urlDisplay.textContent = displayInfo.text;
                 urlDisplay.dataset.isMasked = 'true';
                 urlVisibilityToggle.innerHTML = eyeIconSVG;
@@ -1858,13 +2360,32 @@ async function initApp() {
     if(addHeaderBtn) addHeaderBtn.addEventListener('click', () => {
         console.log('[Event] 点击发送配置编辑器中的添加请求头按钮');
         const webhook = webhooks.find(wh => wh.id === selectedWebhookId);
-        const template = webhook ? webhookUrlTemplates.find(t => t.id === webhook.templateId) : null;
-        if(webhook && (!template || template.type === 'generic')) {
+        
+        let primaryTemplateTypeIsGeneric = true; 
+        if (webhook && webhook.templateIds && webhook.templateIds.length > 0) {
+            const firstTemplate = webhookUrlTemplates.find(t => t.id === webhook.templateIds[0]);
+            if (firstTemplate && firstTemplate.type === 'workweixin') {
+                const allSelectedAreWorkWeixin = webhook.templateIds.every(tid => {
+                    const t = webhookUrlTemplates.find(tmpl => tmpl.id === tid);
+                    return t && t.type === 'workweixin';
+                });
+                if (allSelectedAreWorkWeixin) {
+                    primaryTemplateTypeIsGeneric = false;
+                }
+            }
+        } else if (webhook && (!webhook.templateIds || webhook.templateIds.length === 0)) {
+             primaryTemplateTypeIsGeneric = true;
+        }
+
+
+        if(webhook && primaryTemplateTypeIsGeneric) { 
            if(!webhook.headers) webhook.headers = [];
            webhook.headers.push({key: '', value: ''});
            renderHeaders(webhook.headers, headersListEl, 'header-key-input', 'header-value-input', 'remove-header-btn', 'indigo');
-       } else if (webhook && template && template.type === 'workweixin') {
-           customAlert("企业微信类型配置不支持自定义请求头。");
+       } else if (webhook && !primaryTemplateTypeIsGeneric) {
+           customAlert("当前选中的模板组合不支持自定义请求头 (例如，全部为企业微信类型)。");
+       } else if (!webhook) {
+           customAlert("请先选择一个发送配置。");
        }
     });
     if(headersListEl) headersListEl.addEventListener('click', e => {
@@ -1882,7 +2403,7 @@ async function initApp() {
     if(historyLogListEl) historyLogListEl.addEventListener('click', e => {
         console.log('[Event] 点击历史记录列表项。目标:', e.target);
         const header = e.target.closest('.history-log-header');
-        if (header && header.nextElementSibling) {
+        if (header && header.nextElementSibling) { 
             console.log('[Event] 切换历史记录详情可见性。');
             header.nextElementSibling.classList.toggle('hidden');
             const arrow = header.querySelector('.history-arrow');
@@ -1907,13 +2428,13 @@ async function initApp() {
         refreshScheduledTasksBtn.disabled = true;
         refreshScheduledTasksBtn.textContent = "刷新中...";
         try {
-            const data = await apiRequest('/api/data');
+            const data = await apiRequest('/api/data'); 
             if (data && data.scheduledTasks) {
                 scheduledTasks = data.scheduledTasks;
-                renderScheduledTaskList();
+                renderScheduledTaskList(); 
                 await customAlert('任务列表已刷新。');
             } else {
-                scheduledTasks = [];
+                scheduledTasks = []; 
                 renderScheduledTaskList();
                 await customAlert('任务列表已刷新 (可能为空)。');
             }
@@ -1921,30 +2442,41 @@ async function initApp() {
             console.error("刷新任务列表失败:", error);
             await customAlert(`刷新任务列表失败: ${error.data?.message || error.message}`);
         } finally {
-            isSending = false;
+            isSending = false; 
             refreshScheduledTasksBtn.disabled = false;
-            refreshScheduledTasksBtn.innerHTML = originalBtnContent;
+            refreshScheduledTasksBtn.innerHTML = originalBtnContent; 
         }
     });
 
     if (currentUser.role === 'admin') {
         if(showAddUserFormBtnMain) showAddUserFormBtnMain.addEventListener('click', handleShowAddUserForm);
-        const showAddUserFormBtnSidebar = document.getElementById('show-add-user-form-btn');
+        const showAddUserFormBtnSidebar = document.getElementById('show-add-user-form-btn'); 
         if(showAddUserFormBtnSidebar) showAddUserFormBtnSidebar.addEventListener('click', handleShowAddUserForm);
+        
         if(cancelAddUserBtn) cancelAddUserBtn.addEventListener('click', handleHideAddUserForm);
         if(addUserForm) addUserForm.addEventListener('submit', handleAddUserFormSubmit);
         if(refreshUserListBtn) refreshUserListBtn.addEventListener('click', fetchAndRenderUsers);
+
+        if (adminChangePasswordForm) adminChangePasswordForm.addEventListener('submit', handleAdminChangePasswordFormSubmit);
+        if (adminCancelChangePasswordBtn) adminCancelChangePasswordBtn.addEventListener('click', handleHideAdminChangePasswordModal);
+        if (adminChangePasswordModal) {
+            adminChangePasswordModal.addEventListener('click', (event) => {
+                if (event.target === adminChangePasswordModal) { 
+                    handleHideAdminChangePasswordModal();
+                }
+            });
+        }
     }
     console.log("[App] initApp: 主事件监听器附加完成。");
 
     try {
         console.log("[App] initApp: 开始加载初始数据...");
-        const data = await apiRequest('/api/data');
+        const data = await apiRequest('/api/data'); 
         if (data) {
             webhooks = data.webhooks || [];
-            webhookUrlTemplates = data.webhookUrlTemplates || [];
+            webhookUrlTemplates = data.webhookUrlTemplates || []; 
             history = data.history || {};
-            scheduledTasks = data.scheduledTasks || [];
+            scheduledTasks = data.scheduledTasks || []; 
             console.log(`[App] initApp: 初始数据已从服务器加载。模板数量: ${webhookUrlTemplates.length}, 发送配置数量: ${webhooks.length}`);
         } else {
             throw new Error("未能从服务器加载初始数据 (空响应)。");
@@ -1954,29 +2486,33 @@ async function initApp() {
         if (!error.message.includes('会话已过期') && !error.message.includes('需要修改密码')) {
             await customAlert(`加载应用数据失败: ${error.message}. 请尝试刷新页面。`);
         }
-        return;
+        return; 
     }
 
     renderWebhookList();
-    if (currentUser.role === 'admin') {
+    if (currentUser.role === 'admin') { 
         renderTemplateList();
+        if (usersList.length === 0) { 
+             await fetchAndRenderUsers(); 
+        }
     }
     console.log("[App] initApp: 列表渲染完成。");
 
     if (webhooks.length > 0) {
         console.log("[App] initApp: 有发送配置，选择第一个。");
+        showView('sender'); 
         await handleSelectWebhook(webhooks[0].id);
     } else if (currentUser.role === 'admin' && webhookUrlTemplates.length > 0) {
         console.log("[App] initApp: 无发送配置但有模板 (管理员)，切换到模板视图并选择第一个。");
         showView('templates');
         await handleSelectTemplate(webhookUrlTemplates[0].id);
-    } else if (currentUser.role === 'admin') {
-        console.log("[App] initApp: 无发送配置也无模板 (管理员)，切换到模板视图。");
+    } else if (currentUser.role === 'admin') { 
+        console.log("[App] initApp: 无发送配置也无模板 (管理员)，切换到模板视图并显示欢迎。");
         showView('templates');
         showWelcomeScreen('地址模板', '请从左侧列表选择一个，或点击“新建模板”。');
     }
-    else {
-        console.log("[App] initApp: 无发送配置 (普通用户)。");
+    else { 
+        console.log("[App] initApp: 无发送配置 (普通用户)，显示欢迎。");
         showView('sender');
         showWelcomeScreen('发送配置', '请从左侧列表选择一个，或点击“新建配置”。');
     }
