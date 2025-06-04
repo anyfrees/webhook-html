@@ -1,7 +1,7 @@
 # Use a Node.js 18 base image, as specified in package.json engines
 FROM node:18-alpine
 
-# Set the working directory inside the container
+# Set the working directory inside the container。
 WORKDIR /app
 
 # Copy package.json and package-lock.json to leverage Docker cache
