@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  webhook-sender:
+    # 如果镜像已存在于本地，则使用它；否则，根据 Dockerfile 构建
+    build: .
+    image: anyfrees/webhook-sender-app:latest
+    container_name: webhook-app
+    ports:
+      - "3000:3000"
+    volumes:
+      # 将当前目录下的 data 文件夹映射到容器的 /app/data
+      # Docker Compose 会自动在宿主机上创建 ./data 目录
+      - ./data:/app/data
+    restart: unless-stopped
+    environment:
+      # 您可以在这里设置环境变量，而不是使用 .env 文件
+      # 例如:
+      # NODE_ENV: production
+      # JWT_SECRET: 
+      # APP_SECRET_STRING: 
