@@ -63,7 +63,15 @@ const tabContentHeaders = document.getElementById('tab-content-headers');
 const headersListEl = document.getElementById('headers-list');
 const addHeaderBtn = document.getElementById('add-header-btn');
 const tabContentSchedule = document.getElementById('tab-content-schedule');
+// 新增定时任务UI元素
+const recurrenceTypeSelect = document.getElementById('recurrence-type');
+const scheduleOnceContainer = document.getElementById('schedule-once-container');
 const scheduleDatetimeInput = document.getElementById('schedule-datetime');
+const scheduleRecurringTimeContainer = document.getElementById('schedule-recurring-time-container');
+const scheduleTimeInput = document.getElementById('schedule-time');
+const scheduleWeeklyContainer = document.getElementById('schedule-weekly-container');
+const daysOfWeekCheckboxes = document.querySelectorAll('input[name="dayOfWeek"]');
+
 const saveTaskBtn = document.getElementById('save-task-btn');
 const scheduledTaskListEl = document.getElementById('scheduled-task-list');
 const tabContentHistory = document.getElementById('tab-content-history');
@@ -200,6 +208,21 @@ function formatDate(isoString) {
         return '日期无效';
     }
 }
+
+function formatRecurrence(rule) {
+    if (!rule || rule.type === 'once') return null;
+    const daysMap = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    if (rule.type === 'daily') {
+        return `每天 ${rule.time}`;
+    }
+    if (rule.type === 'weekly' && rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+        const sortedDays = [...rule.daysOfWeek].sort((a,b) => a - b);
+        const dayNames = sortedDays.map(d => daysMap[d] || `周?(${d})`).join(', ');
+        return `每周 ${dayNames} ${rule.time}`;
+    }
+    return '未知循环规则';
+}
+
 
 function getDisplayableUrl(url, isWorkWeixin = false) {
     if (isWorkWeixin) {
@@ -1406,16 +1429,49 @@ async function handleSaveTask() {
         });
     }
     const templateIdsToSchedule = selectedTemplateIdsFromUI.length > 0 ? selectedTemplateIdsFromUI : (webhookConfig.templateIds || []);
-
     if (!Array.isArray(templateIdsToSchedule) || templateIdsToSchedule.length === 0) {
-        await customAlert("请为此发送配置选择至少一个有效的地址模板以创建定时任务。"); return;
+        await customAlert("请为此发送配置选择至少一个有效的地址模板以创建定时任务。");
+        return;
     }
+    
+    // --- 新增: 收集循环规则 ---
+    const recurrenceType = recurrenceTypeSelect.value;
+    let recurrenceRule = { type: recurrenceType };
+    let scheduledTimeISO = null;
 
-    const scheduledDateTimeValue = scheduleDatetimeInput.value;
-    if (!scheduledDateTimeValue) { await customAlert("请选择一个发送日期和时间。"); scheduleDatetimeInput.focus(); return; }
-    const scheduledTime = new Date(scheduledDateTimeValue);
-    if (isNaN(scheduledTime.getTime()) || scheduledTime <= new Date()) {
-        await customAlert("请选择一个有效的未来时间点。"); scheduleDatetimeInput.focus(); return;
+    if (recurrenceType === 'once') {
+        const scheduledDateTimeValue = scheduleDatetimeInput.value;
+        if (!scheduledDateTimeValue) {
+            await customAlert("请为一次性任务选择一个发送日期和时间。");
+            scheduleDatetimeInput.focus();
+            return;
+        }
+        const scheduledTime = new Date(scheduledDateTimeValue);
+        if (isNaN(scheduledTime.getTime()) || scheduledTime <= new Date()) {
+            await customAlert("请为一次性任务选择一个有效的未来时间点。");
+            scheduleDatetimeInput.focus();
+            return;
+        }
+        scheduledTimeISO = scheduledTime.toISOString();
+    } else { // 'daily' or 'weekly'
+        const timeValue = scheduleTimeInput.value;
+        if (!timeValue) {
+            await customAlert("请为循环任务选择一个执行时间。");
+            scheduleTimeInput.focus();
+            return;
+        }
+        recurrenceRule.time = timeValue; // "HH:mm"
+
+        if (recurrenceType === 'weekly') {
+            const selectedDays = Array.from(daysOfWeekCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => parseInt(cb.value, 10));
+            if (selectedDays.length === 0) {
+                await customAlert("请为每周任务选择至少一个星期几。");
+                return;
+            }
+            recurrenceRule.daysOfWeek = selectedDays;
+        }
     }
 
     const recipientOrPhone = phoneNumberInput.value.trim();
@@ -1428,12 +1484,8 @@ async function handleSaveTask() {
     for (const templateId of templateIdsToSchedule) {
         const template = webhookUrlTemplates.find(t => t.id === templateId);
         if (template) {
-            if (template.type === 'workweixin') {
-                isAnyWorkWeixinForTask = true;
-            }
-            if (isPhoneNumberRequiredForConfirmation(template)) { 
-                isAnyGenericRequiringPhonePlaceholderForTask = true;
-            }
+            if (template.type === 'workweixin') isAnyWorkWeixinForTask = true;
+            if (isPhoneNumberRequiredForConfirmation(template)) isAnyGenericRequiringPhonePlaceholderForTask = true;
         } else {
             await customAlert(`错误：找不到ID为 ${templateId} 的模板信息，无法创建定时任务。`);
             return;
@@ -1442,14 +1494,7 @@ async function handleSaveTask() {
     needsRecipientInfoForTask = isAnyWorkWeixinForTask || isAnyGenericRequiringPhonePlaceholderForTask;
 
     if (needsRecipientInfoForTask && !recipientOrPhone) {
-        let alertMessage = "";
-        if (isAnyWorkWeixinForTask && isAnyGenericRequiringPhonePlaceholderForTask) {
-            alertMessage = "当前选中的模板组合中，部分模板需要手机号码/目标参数，部分企业微信模板需要接收者。请输入以创建定时任务。";
-        } else if (isAnyWorkWeixinForTask) {
-            alertMessage = "当前选中的企业微信模板需要接收者 (touser/@all)以创建定时任务，请输入。";
-        } else if (isAnyGenericRequiringPhonePlaceholderForTask) {
-            alertMessage = "当前选中的通用模板需要手机号码/目标参数以创建定时任务，请输入。";
-        }
+        let alertMessage = "当前选中的模板需要接收者/手机号码信息，请输入以创建定时任务。";
         await customAlert(alertMessage);
         phoneNumberInput.focus();
         return;
@@ -1469,14 +1514,11 @@ async function handleSaveTask() {
         const t = webhookUrlTemplates.find(tmpl => tmpl.id === id);
         return t && t.type === 'generic';
     });
-
     if (hasGenericTemplateForTask) {
         for (const templateId of templateIdsToSchedule) {
             const template = webhookUrlTemplates.find(t => t.id === templateId);
-            if (template && template.type === 'generic') {
-                if (!template.url || template.url.trim() === '' || template.url === "WORKWEIXIN_APP_MESSAGE_API") { 
-                    await customAlert(`无法创建定时任务：模板 "${template.name}" 没有有效的通用URL。`); return; 
-                }
+            if (template && template.type === 'generic' && (!template.url || template.url.trim() === '' || template.url === "WORKWEIXIN_APP_MESSAGE_API")) { 
+                await customAlert(`无法创建定时任务：模板 "${template.name}" 没有有效的通用URL。`); return; 
             }
         }
     }
@@ -1490,23 +1532,13 @@ async function handleSaveTask() {
         touser: recipientOrPhone, 
     };
 
-    const firstTemplateForTaskType = templateIdsToSchedule.length > 0 ? webhookUrlTemplates.find(t => t.id === templateIdsToSchedule[0]) : null;
-
     const taskPayloadForApi = {
         originalWebhookId: selectedWebhookId,
-        scheduledTime: scheduledTime.toISOString(),
-        templateType: firstTemplateForTaskType ? firstTemplateForTaskType.type : null, 
-        webhookSnapshot: webhookSnapshot, 
-        finalUrl: null, 
-        workweixinConfig: null 
+        scheduledTime: scheduledTimeISO, // May be null for recurring tasks, backend should handle
+        recurrenceRule: recurrenceRule, // 发送循环规则
+        webhookSnapshot: webhookSnapshot
     };
     
-    if (firstTemplateForTaskType && firstTemplateForTaskType.type === 'generic') {
-        let finalComputedUrl = firstTemplateForTaskType.url; 
-        finalComputedUrl = finalComputedUrl.replace(/{phoneNumber}|{phone}/g, (recipientOrPhone || "").replace(/"/g, '\\"'));
-        taskPayloadForApi.webhookSnapshot.firstTemplateFinalUrl_dev_note = finalComputedUrl.trim(); 
-    }
-
     console.log("[handleSaveTask] 发送给 /api/schedule-task 的负载:", JSON.stringify(taskPayloadForApi, null, 2));
 
     try {
@@ -1516,7 +1548,7 @@ async function handleSaveTask() {
         });
         console.log("[handleSaveTask] /api/schedule-task 响应:", response);
         if (response.success && response.taskId) {
-            await customAlert(`定时任务已保存！\nID: ${response.taskId}\n计划时间: ${formatDate(taskPayloadForApi.scheduledTime)}`);
+            await customAlert(`定时任务已保存！\nID: ${response.taskId}`);
             if(scheduleDatetimeInput) scheduleDatetimeInput.value = ''; 
             if (response.scheduledTasks) { 
                 scheduledTasks = response.scheduledTasks;
@@ -1763,6 +1795,7 @@ function renderHistoryLog(webhookIdToRender) {
         historyLogListEl.appendChild(div);
     });
 }
+
 function renderScheduledTaskList() {
     console.log("[renderScheduledTaskList] 开始渲染定时任务列表。");
     if (!scheduledTaskListEl) return;
@@ -1783,47 +1816,24 @@ function renderScheduledTaskList() {
         taskInfo.className = 'flex-grow mr-2 min-w-0';
 
         const configName = task.webhookSnapshot?.name || '基于未知配置';
-        const originalWhId = task.originalWebhookId || '未知ID';
         const numTemplatesInTask = task.webhookSnapshot?.templateIds?.length || 0;
 
-        let displayIdentifier = "目标未知";
-        let titleForIdentifier = "目标未知";
-        let primaryTaskType = task.templateType; 
-        
-        if (numTemplatesInTask > 0 && task.webhookSnapshot?.templateIds) {
-            const firstTemplateIdInTask = task.webhookSnapshot.templateIds[0];
-            const firstTemplateObject = webhookUrlTemplates.find(t => t.id === firstTemplateIdInTask);
-            
-            if (firstTemplateObject) {
-                primaryTaskType = firstTemplateObject.type; 
-                if (primaryTaskType === 'workweixin') {
-                    const touser = task.webhookSnapshot?.touser || "未指定接收者";
-                    displayIdentifier = `企微接收: ${touser}`;
-                    titleForIdentifier = `企业微信任务，接收者: ${touser}`;
-                } else if (currentUser.role === 'admin' && task.finalUrl) { 
-                    const displayableUrlInfo = getDisplayableUrl(task.finalUrl, false); // task.finalUrl is pre-decrypted
-                    displayIdentifier = `URL: ${displayableUrlInfo.text}`;
-                    titleForIdentifier = displayableUrlInfo.title;
-                } else if (currentUser.role === 'admin' && firstTemplateObject.url) { 
-                    const displayableUrlInfo = getDisplayableUrl(firstTemplateObject.url, false); // template.url is pre-decrypted
-                     displayIdentifier = `URL: ${displayableUrlInfo.text}`;
-                     titleForIdentifier = displayableUrlInfo.title;
-                } else if (primaryTaskType === 'generic') { 
-                    displayIdentifier = "通用类型任务";
-                    titleForIdentifier = "通用类型任务 (URL对普通用户隐藏)";
-                }
-            }
+        // --- 新增：格式化循环规则 ---
+        let scheduleInfoText = '';
+        const recurrenceText = formatRecurrence(task.recurrenceRule);
+        if (recurrenceText) {
+            scheduleInfoText = recurrenceText;
+        } else {
+            scheduleInfoText = `一次性: ${formatDate(task.scheduledTime)}`;
         }
-
 
         let contentPreview = task.webhookSnapshot?.plainBody || '(无内容)';
         const fullContentPreview = contentPreview;
         if (contentPreview.length > 30) { contentPreview = contentPreview.substring(0,30) + '...'; }
 
         taskInfo.innerHTML = `
-            <p class="text-sm text-gray-200 font-semibold truncate" title="基于配置: ${configName} (ID: ${originalWhId})">发送到: <span class="font-normal">${configName}</span></p>
-            <p class="text-xs text-indigo-300 truncate" title="${titleForIdentifier}">主要目标: <span class="font-normal text-gray-400">${displayIdentifier}</span></p>
-            <p class="text-xs text-gray-400">计划时间: ${formatDate(task.scheduledTime)} (${numTemplatesInTask}个模板)</p>
+            <p class="text-sm text-gray-200 font-semibold truncate" title="基于配置: ${configName}">配置: ${configName}</p>
+            <p class="text-xs text-indigo-300">计划: ${scheduleInfoText} (${numTemplatesInTask}个模板)</p>
             <p class="text-xs text-gray-500 truncate" title="${fullContentPreview}">内容: ${contentPreview}</p>
         `;
 
@@ -1837,6 +1847,7 @@ function renderScheduledTaskList() {
         scheduledTaskListEl.appendChild(div);
     });
 }
+
 
 // --- 用户管理功能 (管理员) ---
 async function fetchAndRenderUsers() {
@@ -2412,6 +2423,17 @@ async function initApp() {
             console.log('[Event] 未找到历史记录头部或详情元素。');
         }
     });
+
+    // --- 新增: 监听循环任务UI变化 ---
+    if (recurrenceTypeSelect) {
+        recurrenceTypeSelect.addEventListener('change', (e) => {
+            const type = e.target.value;
+            scheduleOnceContainer.classList.toggle('hidden', type !== 'once');
+            scheduleRecurringTimeContainer.classList.toggle('hidden', type === 'once');
+            scheduleWeeklyContainer.classList.toggle('hidden', type !== 'weekly');
+        });
+    }
+
     if(saveTaskBtn) saveTaskBtn.addEventListener('click', handleSaveTask);
     if(scheduledTaskListEl) scheduledTaskListEl.addEventListener('click', async (e) => {
         const cancelButton = e.target.closest('.cancel-task-btn');

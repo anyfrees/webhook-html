@@ -14,27 +14,29 @@
         font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     }
 
-    input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-        filter: invert(0.8); /* Torna o ícone do seletor de data e hora visível no modo escuro */
+    input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.8);
     }
 
     /* Estilos base unificados para elementos de formulário */
     input[type="text"],
     input[type="password"],
     input[type="datetime-local"],
+    input[type="time"],
     select,
     textarea {
         @apply bg-[#1e2128] border border-gray-600 rounded text-white;
-        @apply focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500; /* Cor de foco padrão, pode ser sobrescrita */
-        @apply px-3 py-2; /* Preenchimento unificado */
-        line-height: 1.25rem; /* Alinhamento vertical consistente para o texto */
+        @apply focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500;
+        @apply px-3 py-2;
+        line-height: 1.25rem;
+        color-scheme: dark; /* FIX: 确保浏览器使用深色控件 */
     }
     select {
-         /* Ajusta a altura para corresponder aos inputs de texto, considerando preenchimento e borda */
-         height: calc(1.25rem + 0.5rem * 2 + 2px); /* line-height + py-2 (0.5rem topo + 0.5rem base) + borda-y (1px*2) */
+         height: calc(1.25rem + 0.5rem * 2 + 2px); 
     }
     textarea {
-        @apply font-sans text-sm; /* Garante que a fonte da textarea corresponda a outros inputs, se necessário */
+        @apply font-sans text-sm;
     }
 }
 
@@ -43,13 +45,12 @@
     .btn {
         @apply py-2 px-4 rounded-md font-semibold text-sm;
         @apply transition-all duration-150 ease-in-out;
-        @apply inline-flex items-center justify-center; /* Garante que texto e ícones estejam centralizados verticalmente */
-        line-height: 1.25rem; /* Altura de linha base do Tailwind para fonte text-sm */
-        @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900; /* Cor de deslocamento do anel ajustada para tema escuro */
+        @apply inline-flex items-center justify-center;
+        line-height: 1.25rem;
+        @apply focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900;
     }
 
     /* Variantes de Cor para Botões */
-    /* 主操作按钮 (如 "+ 新建配置") 使用 indigo-500 作为基准亮色 */
     .btn-primary {
         @apply bg-indigo-500 text-white hover:bg-indigo-600 focus:ring-indigo-400;
     }
@@ -65,10 +66,10 @@
     .btn-danger { 
         @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
     }
-    .btn-teal { /* 主题色为 teal 的操作按钮 (如 "+ 新建模板") */
+    .btn-teal {
         @apply bg-teal-500 text-white hover:bg-teal-600 focus:ring-teal-400;
     }
-    .btn-purple { /* 主题色为 purple 的操作按钮 (如 "+ 新建用户") */
+    .btn-purple {
         @apply bg-purple-500 text-white hover:bg-purple-600 focus:ring-purple-400;
     }
     .btn-gray { 
@@ -81,10 +82,9 @@
         @apply text-teal-400 border border-teal-500 hover:bg-teal-500 hover:text-white focus:ring-teal-500;
     }
 
-    /* Botões de Ação da Barra Lateral (Nova Configuração, Novo Modelo) */
+    /* Botões de Ação da Barra Lateral */
     .btn-sidebar-action {
         @apply w-full mb-3 shadow-md hover:shadow-lg;
-        /* Cores específicas (btn-primary, btn-teal, btn-purple) serão aplicadas no HTML */
     }
 
     /* Botões de Aba do Editor */
@@ -99,26 +99,26 @@
     }
 
     .sidebar-list-item-inactive {
-        @apply bg-gray-800 text-gray-300 hover:bg-gray-700; /* Fundo escuro para inativos */
+        @apply bg-gray-800 text-gray-300 hover:bg-gray-700;
     }
 
-    /* Estado ativo para itens de lista - 使用与导航按钮和主要操作按钮一致的亮色 */
+    /* Estado ativo para itens de lista */
     .sidebar-list-item-active-indigo { 
-        @apply bg-indigo-500 text-white shadow-md; /* 亮靛蓝色，与导航按钮和 .btn-primary 激活状态一致 */
+        @apply bg-indigo-500 text-white shadow-md;
     }
     .sidebar-list-item-active-indigo:hover {
-        @apply bg-indigo-400; /* 悬停时更亮一点 */
+        @apply bg-indigo-400;
     }
 
     .sidebar-list-item-active-teal { 
-        @apply bg-teal-500 text-white shadow-md; /* 亮蓝绿色 */
+        @apply bg-teal-500 text-white shadow-md;
     }
      .sidebar-list-item-active-teal:hover {
         @apply bg-teal-400; 
     }
     
     .sidebar-list-item-active-purple { 
-        @apply bg-purple-500 text-white shadow-md; /* 亮紫色 */
+        @apply bg-purple-500 text-white shadow-md;
     }
     .sidebar-list-item-active-purple:hover {
         @apply bg-purple-400; 

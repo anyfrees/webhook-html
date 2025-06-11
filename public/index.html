@@ -14,7 +14,8 @@
             color: #e5e7eb; 
             font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
         }
-        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
             filter: invert(0.8); 
         }
         .hidden { display: none !important; }
@@ -147,13 +148,13 @@
         }
         
         #headers-list, #scheduled-task-list, #history-log-list, #template-headers-list, #user-list-container,
-        #template-allowed-users-list { /* Added template-allowed-users-list for scrolling */
+        #template-allowed-users-list { 
             flex-grow: 1;
             overflow-y: auto;
             min-height: 0;
         }
-         #multi-template-selector { /* For multi-template selector scrolling */
-            max-height: 10rem; /* Adjust as needed, e.g., max-h-40 */
+         #multi-template-selector { 
+            max-height: 10rem; 
             overflow-y: auto;
         }
 
@@ -255,11 +256,38 @@
                                 <button id="add-header-btn" class="btn btn-outline-indigo mt-2 md:mt-3 flex-shrink-0 text-xs md:text-sm py-1 md:py-1.5">+ 添加特定请求头</button>
                             </div>
                              <div id="tab-content-schedule" class="tab-pane hidden">
-                                <div class="mb-3 md:mb-4 flex-shrink-0">
-                                    <label for="schedule-datetime" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">选择发送日期和时间:</label>
-                                    <input type="datetime-local" id="schedule-datetime" class="datetime-picker w-full mb-2 md:mb-3" />
+                                <div class="mb-3 md:mb-4 flex-shrink-0 space-y-3">
+                                    <div>
+                                        <label for="recurrence-type" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">执行频率:</label>
+                                        <select id="recurrence-type" class="w-full">
+                                            <option value="once">执行一次</option>
+                                            <option value="daily">每天</option>
+                                            <option value="weekly">每周</option>
+                                        </select>
+                                    </div>
+                                    <div id="schedule-once-container">
+                                        <label for="schedule-datetime" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">选择发送日期和时间:</label>
+                                        <input type="datetime-local" id="schedule-datetime" class="w-full" />
+                                    </div>
+                                    <div id="schedule-recurring-time-container" class="hidden">
+                                        <label for="schedule-time" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">选择执行时间:</label>
+                                        <input type="time" id="schedule-time" class="w-full" />
+                                    </div>
+                                    <div id="schedule-weekly-container" class="hidden">
+                                        <label class="block text-xs md:text-sm font-medium text-gray-300 mb-1">选择星期几:</label>
+                                        <div class="grid grid-cols-4 gap-2 text-xs">
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="1" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周一</label>
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="2" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周二</label>
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="3" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周三</label>
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="4" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周四</label>
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="5" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周五</label>
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="6" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周六</label>
+                                            <label class="flex items-center"><input type="checkbox" name="dayOfWeek" value="0" class="mr-1.5 h-3.5 w-3.5 rounded border-gray-500 text-indigo-600 focus:ring-indigo-500 bg-[#2f3241]">周日</label>
+                                        </div>
+                                    </div>
                                     <button id="save-task-btn" class="btn btn-primary w-full shadow-md hover:shadow-lg">保存为定时任务</button>
                                 </div>
+
                                 <div class="flex justify-between items-center mb-2 pb-2 border-b border-gray-700 flex-shrink-0">
                                     <h3 class="text-base md:text-lg font-semibold text-gray-200">已计划的任务列表</h3>
                                     <button id="refreshScheduledTasksBtn" class="btn btn-gray text-xs py-1 px-1.5 md:px-2">
@@ -401,7 +429,7 @@
                             <li>通用模板支持使用 <code>{phoneNumber}</code> 和 <code>{userMessage}</code> 占位符。</li>
                             <li>企业微信模板需要配置 CorpID, CorpSecret (将加密存储), AgentID 和消息类型。</li>
                             <li>在“发送配置”中，您可以选择模板，并填写具体的消息内容和接收者信息。</li>
-                            <li>支持立即发送，也支持设置“定时发送”任务。</li>
+                            <li>支持立即发送，也支持设置“定时发送”任务（包括一次性、每日、每周循环）。</li>
                             <li>每个发送配置都有独立的“发送历史”记录。</li>
                             <li>管理员可以进行用户管理操作。</li>
                         </ul>

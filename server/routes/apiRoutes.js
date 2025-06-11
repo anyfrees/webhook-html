@@ -199,11 +199,23 @@ router.post('/schedule-task', async (req, res, next) => {
         const userId = req.user.userId;
         const userRole = req.user.role;
         const taskDataFromClient = req.body; 
+
+        // --- FIX START: 调整验证逻辑 ---
+        const isOnceTask = !taskDataFromClient.recurrenceRule || taskDataFromClient.recurrenceRule.type === 'once';
         
-        if (!taskDataFromClient || !taskDataFromClient.originalWebhookId || !taskDataFromClient.scheduledTime || 
-            !taskDataFromClient.webhookSnapshot || !Array.isArray(taskDataFromClient.webhookSnapshot.templateIds) || taskDataFromClient.webhookSnapshot.templateIds.length === 0) {
-            return res.status(400).json({ message: '无效的定时任务数据：缺少必要字段或templateIds。' });
+        let validationError = null;
+        if (!taskDataFromClient || !taskDataFromClient.originalWebhookId || !taskDataFromClient.webhookSnapshot || !Array.isArray(taskDataFromClient.webhookSnapshot.templateIds) || taskDataFromClient.webhookSnapshot.templateIds.length === 0) {
+            validationError = '无效的定时任务数据：缺少配置ID, 快照或模板ID。';
+        } else if (isOnceTask && !taskDataFromClient.scheduledTime) {
+            validationError = '无效的定时任务数据：一次性任务必须提供 scheduledTime。';
+        } else if (!isOnceTask && (!taskDataFromClient.recurrenceRule || !taskDataFromClient.recurrenceRule.time)) {
+            validationError = '无效的定时任务数据：循环任务必须提供 recurrenceRule 和 time。';
         }
+
+        if (validationError) {
+            return res.status(400).json({ message: validationError });
+        }
+        // --- FIX END ---
         
         const result = await taskService.scheduleNewTask(taskDataFromClient, userId, userRole);
         
@@ -218,6 +230,7 @@ router.post('/schedule-task', async (req, res, next) => {
         next(error);
     }
 });
+
 
 router.delete('/schedule-task/:taskId', async (req, res, next) => {
     try {
