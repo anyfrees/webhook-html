@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" /> 
     <title>Webhook Sender</title>
     <link rel="stylesheet" href="/assets/css/output.css">
+    <link rel="icon" href="./icon.ico" type="image/x-icon">
     <style>
         html, body {
             height: 100%; 
@@ -123,18 +124,16 @@
             min-height: 0; 
             overflow-y: hidden; 
         }
-
+        
+        /* --- MODIFICATION START: Restored scrolling to the tab pane --- */
         .tab-pane {
             display: flex; 
             flex-direction: column;
             flex-grow: 1; 
             min-height: 0;
-            overflow-y: auto; 
+            overflow-y: auto; /* This allows the entire tab content to scroll if it overflows */
         }
-        
-        #tab-content-body, 
-        #template-body-input-container {
-        }
+        /* --- MODIFICATION END --- */
 
         #webhook-body, #template-body-input { 
             display: block; 
@@ -147,12 +146,18 @@
             box-sizing: border-box; 
         }
         
-        #headers-list, #scheduled-task-list, #history-log-list, #template-headers-list, #user-list-container,
+        #headers-list, #history-log-list, #template-headers-list, #user-list-container,
         #template-allowed-users-list { 
             flex-grow: 1;
             overflow-y: auto;
             min-height: 0;
         }
+
+        /* --- MODIFICATION: Make the task list not grow on its own --- */
+        #scheduled-task-list {
+             /* It no longer needs flex-grow or overflow, its parent .tab-pane handles it */
+        }
+
          #multi-template-selector { 
             max-height: 10rem; 
             overflow-y: auto;
@@ -216,9 +221,9 @@
             <main id="main-content" class="app-view-content">
                 <div id="sender-view" class="hidden"> 
                     <div id="webhook-editor" class="hidden"> 
-                        <div class="flex flex-col sm:flex-row items-start sm:items-center mb-3 md:mb-4 pb-3 border-b border-gray-700 flex-shrink-0">
-                            <input type="text" id="webhook-name" placeholder="发送配置名称" class="text-lg md:text-xl font-semibold bg-transparent focus:outline-none text-gray-100 w-full sm:flex-grow mr-0 sm:mr-4 mb-2 sm:mb-0 p-1 rounded border border-transparent focus:border-indigo-500">
-                            <button id="send-now-btn" class="btn btn-success shadow-md hover:shadow-lg w-full sm:w-auto">立即发送</button>
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3 md:mb-4 pb-3 border-b border-gray-700 flex-shrink-0">
+                            <input type="text" id="webhook-name" placeholder="发送配置名称" class="text-lg md:text-xl font-semibold bg-transparent focus:outline-none text-gray-100 flex-grow min-w-0 p-1 rounded border border-transparent focus:border-indigo-500">
+                            <button id="send-now-btn" class="btn btn-success shadow-md hover:shadow-lg flex-shrink-0">立即发送</button>
                         </div>
                         
                         <div class="mb-2 md:mb-3 flex-shrink-0">
@@ -307,9 +312,9 @@
                 </div>
                  <div id="template-manager-view" class="hidden">
                    <div id="template-editor" class="hidden">
-                        <div class="flex flex-col sm:flex-row items-start sm:items-center mb-3 md:mb-4 pb-3 border-b border-gray-700 flex-shrink-0">
-                            <input type="text" id="template-name-input" placeholder="模板名称" class="text-lg md:text-xl font-semibold bg-transparent focus:outline-none text-gray-100 w-full sm:flex-grow mr-0 sm:mr-4 mb-2 sm:mb-0 p-1 rounded border border-transparent focus:border-teal-500">
-                            <button id="save-template-btn" class="btn btn-teal shadow-md hover:shadow-lg w-full sm:w-auto">保存模板</button>
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-3 md:mb-4 pb-3 border-b border-gray-700 flex-shrink-0">
+                            <input type="text" id="template-name-input" placeholder="模板名称" class="text-lg md:text-xl font-semibold bg-transparent focus:outline-none text-gray-100 flex-grow min-w-0 p-1 rounded border border-transparent focus:border-teal-500">
+                            <button id="save-template-btn" class="btn btn-teal shadow-md hover:shadow-lg flex-shrink-0">保存模板</button>
                         </div>
                         <div class="mb-2 md:mb-3 flex-shrink-0">
                             <label for="template-type-select" class="block text-xs md:text-sm font-medium text-gray-300 mb-1">模板类型:</label>

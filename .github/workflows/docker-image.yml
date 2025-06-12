@@ -1,61 +1,72 @@
+# .github/workflows/docker-image.yml
+
 name: Build and Push Docker Image
 
 on:
   push:
     branches:
-      - main # 当 main 分支有推送时触发
-    # 如果您想在打标签时触发，可以使用：
-    # tags:
-    #   - 'v*.*.*' # 例如 v1.0.0, v1.2.3
+      - main # 当 main 分支有代码推送时触发
 
 jobs:
   build-and-push:
-    runs-on: ubuntu-latest # 使用最新的 Ubuntu runner
+    # 运行此任务的虚拟机环境
+    runs-on: ubuntu-latest
 
+    # 为任务授予权限，需要写入packages来发布镜像
     permissions:
-      contents: read      # 需要读取仓库内容
-      packages: write     # 需要写入 GitHub Packages (Container Registry)
+      contents: read
+      packages: write
 
     steps:
+      # 步骤1: 检出代码
+      # 拉取你的仓库代码到CI/CD环境中
       - name: Checkout repository
-        uses: actions/checkout@v4 #检出您的代码
+        uses: actions/checkout@v4
 
-      - name: Set up QEMU # 可选，用于构建多平台镜像
+      # 步骤2: 设置QEMU (可选，用于构建多平台镜像)
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      - name: Set up Docker Buildx # 设置 Buildx，这是 Docker 的下一代构建器
+      # 步骤3: 设置Docker Buildx
+      # Buildx是Docker的下一代构建器，支持更多高级功能
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 步骤4: 登录到GitHub容器镜像仓库 (GHCR)
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }} # 使用触发工作流的用户的用户名
-          password: ${{ secrets.GITHUB_TOKEN }} # 使用自动生成的 GITHUB_TOKEN
+          username: ${{ github.actor }} # 使用触发工作流的GitHub用户名
+          password: ${{ secrets.GITHUB_TOKEN }} # 使用GitHub自动生成的令牌进行认证
 
-      # - name: Log in to Docker Hub (如果推送到 Docker Hub)
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # --- 新增步骤 ---
+      # 步骤5: 构建Tailwind CSS
+      # 由于 output.css 在 .gitignore 中被忽略，我们需要在CI流程中构建它
+      - name: Build Tailwind CSS
+        run: |
+          npm install # 安装 package.json 中定义的所有依赖，包括tailwindcss
+          npm run tailwind:build # 运行在 package.json 中定义的脚本来生成 output.css
+      # --- 结束新增步骤 ---
 
+      # 步骤6: 提取Docker元数据 (标签和Label)
       - name: Extract metadata (tags, labels) for Docker
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/webhook-sender # 您的镜像名称
-          # Docker Hub 示例: your-dockerhub-username/webhook-sender
+          images: ghcr.io/${{ github.repository }}/${{ github.repository_owner }}/webhook-sender # 您的镜像名称
           tags: |
-            type=sha # 使用 Git SHA 作为标签
-            type=raw,value=latest,enable={{is_default_branch}} # 如果是默认分支 (main), 也打上 latest 标签
+            type=sha # 使用Git提交的SHA作为标签，例如: sha-abcdef
+            type=raw,value=latest,enable={{is_default_branch}} # 如果是默认分支(main), 则额外打上 'latest' 标签
 
+      # 步骤7: 构建并推送Docker镜像
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: . # Dockerfile 的上下文路径 (项目根目录)
-          file: ./Dockerfile # Dockerfile 的路径
-          push: true # 构建成功后推送镜像
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha # 从 GitHub Actions 缓存中拉取
-          cache-to: type=gha,mode=max # 推送到 GitHub Actions 缓存 (mode=max 意味着写入所有构建层)
+          context: . # Dockerfile的上下文路径 (项目根目录)
+          file: ./Dockerfile # Dockerfile的路径
+          push: true # 构建成功后推送到仓库
+          tags: ${{ steps.meta.outputs.tags }} # 使用上一步生成的标签
+          labels: ${{ steps.meta.outputs.labels }} # 使用上一步生成的Label
+          cache-from: type=gha # 从GitHub Actions缓存中拉取层
+          cache-to: type=gha,mode=max # 将所有构建层推送到GitHub Actions缓存中，加速后续构建

@@ -1810,7 +1810,8 @@ function renderScheduledTaskList() {
 
     [...userTasks].sort((a, b) => new Date(a.scheduledTime) - new Date(b.scheduledTime)).forEach(task => {
         const div = document.createElement('div');
-        div.className = 'bg-[#1a1d24] p-3 rounded shadow-sm border border-gray-700/50 flex justify-between items-center mb-2';
+        // 优化后
+        div.className = 'bg-[#1a1d24] p-3 rounded shadow-sm border border-gray-700/50 flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-2';
 
         const taskInfo = document.createElement('div');
         taskInfo.className = 'flex-grow mr-2 min-w-0';
