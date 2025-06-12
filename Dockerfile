@@ -1,29 +1,43 @@
-# Use a Node.js 18 base image, as specified in package.json engines
-FROM node:18-alpine
+# --- STAGE 1: Build Environment ---
+# 使用一个完整的 Node.js 镜像作为构建器，并命名为 "builder"
+FROM node:18-alpine AS builder
 
-# Set the working directory inside the container。
+# 设置工作目录
 WORKDIR /app
 
-# Copy package.json and package-lock.json to leverage Docker cache
-# This step is optimized: if only source code changes, npm install won't re-run
-# 复制 package.json 和 package-lock.json
+# 复制 package.json 和 lock 文件
 COPY package*.json ./
 
-# 安装应用程序依赖项
+# 安装所有依赖，包括 devDependencies 以便运行构建脚本
 RUN npm install
 
-# 复制 .env 文件
-COPY .env ./.env
-
-# 复制其余应用程序代码
+# 复制所有源代码
 COPY . .
 
-# Build Tailwind CSS (as defined in package.json scripts)
-# This command generates public/assets/css/output.css
+# 运行 Tailwind CSS 构建命令
 RUN npm run tailwind:build
 
-# Expose the port the app runs on (defaulting to 3000 as per server.js)
+
+# --- STAGE 2: Production Environment ---
+# 使用一个全新的、干净的 Node.js 镜像作为最终的生产环境
+FROM node:18-alpine
+
+WORKDIR /app
+
+# 从 "builder" 阶段复制 package.json 和 lock 文件
+COPY --from=builder /app/package*.json ./
+
+# 只安装生产环境必需的依赖项
+RUN npm install --omit=dev
+
+# 从 "builder" 阶段复制已构建好的前端资源 (包括 output.css)
+COPY --from=builder /app/public /app/public
+
+# 从 "builder" s阶段复制后端服务器代码
+COPY --from=builder /app/server /app/server
+
+# 暴露端口
 EXPOSE 3000
 
-# Define the command to run the application
-CMD ["npm", "start"]
+# 定义最终的启动命令
+CMD [ "node", "server/server.js" ]
