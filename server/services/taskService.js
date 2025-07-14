@@ -1,12 +1,12 @@
 // server/services/taskService.js
 
-const cron = require('node-cron'); 
+const cron = require('node-cron');
 const { v4: uuidv4 } = require('uuid');
 const storageService = require('./storageService');
 const webhookService = require('./webhookService');
 const { encryptText, decryptText } = require('./cryptoService');
 
-const activeScheduledJobs = new Map(); 
+const activeScheduledJobs = new Map();
 
 /**
  * 将前端的循环规则转换为 Cron 表达式。
@@ -18,7 +18,7 @@ function convertRecurrenceToCron(recurrenceRule) {
         return null;
     }
     const [hour, minute] = recurrenceRule.time.split(':');
-    
+
     switch (recurrenceRule.type) {
         case 'daily':
             // 每天在指定时间执行: "分 时 * * *"
@@ -52,11 +52,11 @@ async function executeScheduledTask(preparedTaskContext, userId) {
         if (!webhookSnapshot || !Array.isArray(webhookSnapshot.templateIds) || webhookSnapshot.templateIds.length === 0) {
             throw new Error(`任务 ${taskId} 的快照无效或缺少 templateIds。`);
         }
-        
+
         payloadForWebhookService = {
             originalWebhookId: preparedTaskContext.originalWebhookId,
             templateIds: webhookSnapshot.templateIds,
-            phone: webhookSnapshot.phoneNumber || webhookSnapshot.touser, 
+            phone: webhookSnapshot.phoneNumber || webhookSnapshot.touser,
             plainBody: webhookSnapshot.plainBody,
             headers: webhookSnapshot.headers,
             isScheduledTaskRun: true,
@@ -67,7 +67,7 @@ async function executeScheduledTask(preparedTaskContext, userId) {
         if (preparedTaskContext.templateType === 'generic' && preparedTaskContext.finalUrl) {
         } else if (preparedTaskContext.templateType === 'workweixin' && preparedTaskContext.workweixinConfig) {
         }
-        
+
         console.log(`[TaskService - execute] 任务 ${taskId} 构造的 payloadForWebhookService (部分):`, {
             originalWebhookId: payloadForWebhookService.originalWebhookId,
             templateIds: payloadForWebhookService.templateIds,
@@ -84,10 +84,9 @@ async function executeScheduledTask(preparedTaskContext, userId) {
         // 对于非循环任务，执行后删除
         if (!preparedTaskContext.recurrenceRule || preparedTaskContext.recurrenceRule.type === 'once') {
             try {
-                const userTasks = await storageService.getAllRawScheduledTasks(userId);
-                const remainingTasks = userTasks.filter(t => t.id !== taskId);
-                await storageService.saveScheduledTasks(remainingTasks, userId);
-                activeScheduledJobs.delete(taskId); 
+                // [BUG修复] 调用新的原子化删除函数
+                await storageService.removeScheduledTask(taskId);
+                activeScheduledJobs.delete(taskId);
                 console.log(`[TaskService - execute] 一次性任务 ID: ${taskId} (用户: ${userId}) 已从存储和活动任务列表中移除。`);
             } catch (storageError) {
                 console.error(`[TaskService - execute] 从存储中移除已执行的一次性任务 ID: ${taskId} (用户: ${userId}) 失败:`, storageError);
@@ -119,14 +118,14 @@ function prepareTaskForExecutionAndScheduling(rawTaskFromStorage) {
             console.warn(`[TaskService - prepareTask] 解密后的 finalUrl 对于任务 ${rawTaskFromStorage.id} 无效或为空: "${decryptedFinalUrl}"`);
         }
     }
-    
+
     if (webhookSnapshot.url && rawTaskFromStorage.templateType === 'generic' && webhookSnapshot.templateIds.length <= 1) {
          webhookSnapshot.url = decryptText(webhookSnapshot.url);
     }
 
     const preparedTask = {
         ...rawTaskFromStorage,
-        finalUrl: decryptedFinalUrl, 
+        finalUrl: decryptedFinalUrl,
         webhookSnapshot: webhookSnapshot,
     };
 
@@ -169,7 +168,7 @@ function scheduleTaskJob(preparedTaskContext) {
             console.log(`[TaskService - scheduleTaskJob] 调度一次性任务 ID: ${taskId} 在 ${scheduledDate.toLocaleString()} (延迟: ${Math.round(delay/1000)}s)`);
             const timeoutId = setTimeout(async () => {
                 console.log(`[TaskService - timeoutFired] 定时器触发，任务ID: ${taskId}`);
-                activeScheduledJobs.delete(taskId); 
+                activeScheduledJobs.delete(taskId);
                 await executeScheduledTask(preparedTaskContext, userId);
             }, delay);
             activeScheduledJobs.set(taskId, { type: 'timeout', id: timeoutId, taskContext: preparedTaskContext, userId: userId });
@@ -191,7 +190,7 @@ async function initializeScheduledTasks() {
     activeScheduledJobs.clear();
 
     try {
-        const allRawTasksFromStorage = await storageService.getAllRawScheduledTasks(); 
+        const allRawTasksFromStorage = await storageService.getAllRawScheduledTasks();
         console.log(`[TaskService - init] 从存储中加载了 ${allRawTasksFromStorage.length} 个原始任务进行初始化。`);
 
         const tasksToProcess = [];
@@ -218,9 +217,10 @@ async function initializeScheduledTasks() {
         }
 
         if (tasksToRemoveIds.length > 0) {
-            const currentTasksInStorage = await storageService.getAllRawScheduledTasks(); 
+            const currentTasksInStorage = await storageService.getAllRawScheduledTasks();
             const validTasksAfterExpiryCheck = currentTasksInStorage.filter(task => !tasksToRemoveIds.includes(task.id));
-            await storageService.saveScheduledTasks(validTasksAfterExpiryCheck, null); 
+            // [BUG修复] 调用 saveScheduledTasks 进行批量覆盖
+            await storageService.saveScheduledTasks(validTasksAfterExpiryCheck);
             console.log(`[TaskService - init] 已从存储中移除 ${tasksToRemoveIds.length} 个在启动时发现的过期或无效任务。`);
         }
 
@@ -267,7 +267,7 @@ async function scheduleNewTask(taskDataFromClient, userId, userRole) {
             throw new Error(`创建定时任务失败：无法找到或无权访问首个关联的地址模板 (ID: ${firstTemplateId})。`);
         }
         const primaryTemplateType = firstRawTemplate.type;
-        
+
         const taskId = uuidv4();
         const rawTaskToStore = {
             id: taskId,
@@ -277,8 +277,8 @@ async function scheduleNewTask(taskDataFromClient, userId, userRole) {
             recurrenceRule: recurrenceRule, // 存储循环规则
             templateType: primaryTemplateType,
             webhookSnapshot: webhookSnapshot,
-            finalUrl: null, 
-            workweixinConfig: null 
+            finalUrl: null,
+            workweixinConfig: null
         };
 
         if (primaryTemplateType === 'generic' && taskDataFromClient.finalUrl) {
@@ -288,18 +288,17 @@ async function scheduleNewTask(taskDataFromClient, userId, userRole) {
                  throw new Error(`创建企业微信定时任务失败：模板 (ID: ${firstRawTemplate.id}) 缺少配置。`);
             }
             rawTaskToStore.workweixinConfig = {
-                corpid: firstRawTemplate.corpid, 
-                corpsecret: firstRawTemplate.corpsecret, 
-                agentid: firstRawTemplate.agentid, 
+                corpid: firstRawTemplate.corpid,
+                corpsecret: firstRawTemplate.corpsecret,
+                agentid: firstRawTemplate.agentid,
                 touser: webhookSnapshot.touser,
-                msgtype: firstRawTemplate.workweixin_msgtype, 
+                msgtype: firstRawTemplate.workweixin_msgtype,
             };
-            delete rawTaskToStore.finalUrl; 
+            delete rawTaskToStore.finalUrl;
         }
 
-        const userTasks = await storageService.getAllRawScheduledTasks(userId);
-        userTasks.push(rawTaskToStore);
-        await storageService.saveScheduledTasks(userTasks, userId);
+        // [BUG修复] 调用新的原子化添加函数
+        await storageService.addScheduledTask(rawTaskToStore);
 
         const preparedTask = prepareTaskForExecutionAndScheduling(rawTaskToStore);
         if (preparedTask) {
@@ -323,7 +322,7 @@ async function cancelScheduledTask(taskId, userId, forceAdminCancel = false) {
     try {
         const jobEntry = activeScheduledJobs.get(taskId);
         if (jobEntry) {
-            if (!forceAdminCancel && jobEntry.userId !== userId) { 
+            if (!forceAdminCancel && jobEntry.userId !== userId) {
                  console.warn(`[TaskService - cancel] 权限不足: 用户 ${userId} 尝试取消不属于自己的活动任务 ${taskId}`);
                  return { success: false, msg: '权限不足，无法取消此活动任务。' };
             }
@@ -335,8 +334,9 @@ async function cancelScheduledTask(taskId, userId, forceAdminCancel = false) {
             console.warn(`[TaskService - cancel] 未在内存中找到活动任务 ID: ${taskId}。将继续尝试从存储中删除。`);
         }
 
-        const tasksForUserOrAll = forceAdminCancel ? await storageService.getAllRawScheduledTasks() : await storageService.getAllRawScheduledTasks(userId);
-        const taskInStorage = tasksForUserOrAll.find(t => t.id === taskId);
+        // [BUG修复] 检查任务是否存在于存储中，然后再删除
+        const allTasks = await storageService.getAllRawScheduledTasks();
+        const taskInStorage = allTasks.find(t => t.id === taskId);
 
         if (!taskInStorage) {
             console.warn(`[TaskService - cancel] 未在存储中找到任务 ID: ${taskId}`);
@@ -347,15 +347,8 @@ async function cancelScheduledTask(taskId, userId, forceAdminCancel = false) {
             return { success: false, msg: '权限不足，无法从存储中删除此任务。' };
         }
 
-        if (forceAdminCancel) {
-            const allTasks = await storageService.getAllRawScheduledTasks(); 
-            const remainingAllTasks = allTasks.filter(t => t.id !== taskId);
-            await storageService.saveScheduledTasks(remainingAllTasks, null); 
-        } else {
-            const userTasks = await storageService.getAllRawScheduledTasks(userId);
-            const remainingUserTasks = userTasks.filter(t => t.id !== taskId);
-            await storageService.saveScheduledTasks(remainingUserTasks, userId);
-        }
+        // [BUG修复] 调用新的原子化删除函数
+        await storageService.removeScheduledTask(taskId);
 
         console.log(`[TaskService - cancel] 任务 ID: ${taskId} 已成功从存储中移除。`);
         return { success: true, msg: '定时任务已取消。' };

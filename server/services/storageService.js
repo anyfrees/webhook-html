@@ -47,7 +47,7 @@ async function initializeDefaultUser() {
                 }
                 if (typeof modifiedUser.mustChangePassword === 'undefined') {
                     usersModified = true;
-                    modifiedUser.mustChangePassword = modifiedUser.username === 'admin'; 
+                    modifiedUser.mustChangePassword = modifiedUser.username === 'admin';
                 }
                 // 初始化新的登录尝试和锁定字段 (如果不存在)
                 if (typeof modifiedUser.failedLoginAttempts === 'undefined') {
@@ -79,13 +79,13 @@ async function ensureDataDirectories() {
         await fs.mkdir(DATA_DIR, { recursive: true });
         await fs.mkdir(HISTORY_DIR, { recursive: true });
         await initializeDefaultUser(); // 会处理 users.json 和新字段
-        
+
         let webhooks = await readFileData(WEBHOOKS_FILE, []);
         let webhooksModified = false;
         webhooks = webhooks.map(wh => {
             const newWh = {...wh};
-            if (newWh.hasOwnProperty('templateId') && !newWh.hasOwnProperty('templateIds')) {
-                newWh.templateIds = newWh.templateId ? [newWh.templateId] : [];
+            if (wh.hasOwnProperty('templateId') && !wh.hasOwnProperty('templateIds')) {
+                newWh.templateIds = wh.templateId ? [wh.templateId] : [];
                 delete newWh.templateId;
                 webhooksModified = true;
             } else if (!newWh.hasOwnProperty('templateIds')) {
@@ -104,11 +104,11 @@ async function ensureDataDirectories() {
         let templatesModified = false;
         templates = templates.map(t => {
             if (typeof t.isGlobal === 'undefined') {
-                t.isGlobal = (t.userId === 'admin'); 
+                t.isGlobal = (t.userId === 'admin');
                 templatesModified = true;
             }
             if (typeof t.allowedUserIds === 'undefined') {
-                t.allowedUserIds = []; 
+                t.allowedUserIds = [];
                 templatesModified = true;
             }
             return t;
@@ -176,7 +176,7 @@ async function getUsers() {
 }
 
 async function findUserByUsername(username, includeSensitiveLoginData = false) {
-    const users = await readFileData(USERS_FILE, []); 
+    const users = await readFileData(USERS_FILE, []);
     const user = users.find(u => u.username === username);
     if (user) {
         if (includeSensitiveLoginData) { // 用于登录过程，需要所有字段
@@ -193,7 +193,7 @@ async function findUserById(userId, includePasswordAndLoginData = false) {
     const users = await readFileData(USERS_FILE, []);
     const user = users.find(u => u.id === userId);
     if (user) {
-        if (includePasswordAndLoginData) return user; 
+        if (includePasswordAndLoginData) return user;
         const { password, failedLoginAttempts, lockoutUntil, lockoutLevel, ...userWithoutSensitive } = user;
         return userWithoutSensitive;
     }
@@ -230,14 +230,14 @@ async function updateUser(userId, updates) {
         return null;
     }
     // 确保只更新传入的字段，并添加 updatedAt
-    const updatedUser = { 
-        ...users[userIndex], 
-        ...updates, 
-        updatedAt: new Date().toISOString() 
+    const updatedUser = {
+        ...users[userIndex],
+        ...updates,
+        updatedAt: new Date().toISOString()
     };
     users[userIndex] = updatedUser;
     await writeFileData(USERS_FILE, users);
-    
+
     // 返回不含密码和敏感登录尝试信息的用户对象
     const { password, failedLoginAttempts, lockoutUntil, lockoutLevel, ...updatedUserWithoutSensitive } = users[userIndex];
     return updatedUserWithoutSensitive;
@@ -269,7 +269,7 @@ async function getWebhooks(userId) {
 async function saveWebhooks(webhooksToSave, userId) {
     const allWebhooks = await readFileData(WEBHOOKS_FILE, []);
     const otherUsersWebhooks = allWebhooks.filter(wh => wh.userId !== userId);
-    
+
     const newUsersWebhooks = webhooksToSave.map(wh => {
         const newWh = {
             ...wh,
@@ -277,7 +277,7 @@ async function saveWebhooks(webhooksToSave, userId) {
             userId: userId,
         };
         newWh.templateIds = Array.isArray(wh.templateIds) ? wh.templateIds : [];
-        delete newWh.templateId; 
+        delete newWh.templateId;
         return newWh;
     });
     await writeFileData(WEBHOOKS_FILE, [...otherUsersWebhooks, ...newUsersWebhooks]);
@@ -307,9 +307,9 @@ async function getAccessibleTemplatesForUserDisplay(requestingUserId, requesting
     if (requestingUserRole === 'admin') {
         accessibleRaw = allRaw;
         console.log(`[StorageService] Admin '${requestingUserId}' 获取到所有 ${accessibleRaw.length} 个模板。`);
-    } else { 
-        accessibleRaw = allRaw.filter(t => 
-            t.isGlobal === true || 
+    } else {
+        accessibleRaw = allRaw.filter(t =>
+            t.isGlobal === true ||
             (Array.isArray(t.allowedUserIds) && t.allowedUserIds.includes(requestingUserId))
         );
         console.log(`[StorageService] 普通用户 '${requestingUserId}' 获取到 ${accessibleRaw.length} 个可访问模板 (全局或特定授权)。`);
@@ -324,7 +324,7 @@ async function getAccessibleTemplatesForUserDisplay(requestingUserId, requesting
             workweixin_agentid: (t.type === 'workweixin' && t.agentid) ? decryptText(t.agentid) : undefined,
             workweixin_msgtype: (t.type === 'workweixin') ? t.workweixin_msgtype : undefined,
             isGlobal: !!t.isGlobal,
-            allowedUserIds: t.allowedUserIds || [] 
+            allowedUserIds: t.allowedUserIds || []
         };
         if (t.type !== 'workweixin') {
             delete decryptedTemplate.workweixin_corpid;
@@ -348,63 +348,66 @@ async function getRawTemplateByIdForUserAccess(templateId, requestingUserId, req
 
     if (requestingUserRole === 'admin') {
         console.log(`[StorageService] 管理员 '${requestingUserId}' 允许访问模板 ID '${templateId}'。`);
-        return template; 
-    } else { 
+        return template;
+    } else {
         if (template.isGlobal === true || (Array.isArray(template.allowedUserIds) && template.allowedUserIds.includes(requestingUserId))) {
             console.log(`[StorageService] 普通用户 '${requestingUserId}' 允许访问模板 ID '${templateId}' (全局或特定授权)。`);
-            return template; 
+            return template;
         }
     }
     console.warn(`[StorageService] 用户 '${requestingUserId}' (角色: ${requestingUserRole}) 无权访问模板 ID '${templateId}'。`);
     return null;
 }
 
+/**
+ * [BUG修复] 重构函数：此函数现在将客户端发送的数组视为最终状态，并完全覆盖存储。
+ * @param {Array} templatesToSaveFromAdmin - 从客户端接收的、代表最终状态的模板数组。
+ * @param {string} adminUserId - 执行操作的管理员ID。
+ */
 async function saveTemplates(templatesToSaveFromAdmin, adminUserId) {
-    console.log(`[StorageService] saveTemplates - AdminID: ${adminUserId} 正在处理 ${templatesToSaveFromAdmin.length} 个模板。`);
-    const allCurrentRawTemplatesInStorage = await getAllRawTemplates();
+    console.log(`[StorageService] saveTemplates - AdminID: ${adminUserId} 正在以 ${templatesToSaveFromAdmin.length} 个模板的状态覆盖存储。`); //
 
-    const processedClientTemplates = templatesToSaveFromAdmin.map(tClient => {
-        const existingRawTemplate = allCurrentRawTemplatesInStorage.find(tc => tc.id === tClient.id);
-        const templateId = tClient.id || uuidv4();
+    // 读取一次当前存储，仅用于保留创建者(userId)和创建时间(createdAt)等不可变数据
+    const allCurrentRawTemplatesInStorage = await getAllRawTemplates(); //
 
+    const finalTemplatesForStorage = templatesToSaveFromAdmin.map(tClient => { //
+        // 如果客户端模板存在，查找其旧版本
+        const existingRawTemplate = allCurrentRawTemplatesInStorage.find(tc => tc.id === tClient.id); //
+        const templateId = tClient.id || uuidv4(); //
+
+        // --- 加密敏感字段 ---
         let encryptedUrl = tClient.url;
         if (tClient.type === 'generic' && tClient.url) {
-            encryptedUrl = encryptText(tClient.url);
+            encryptedUrl = encryptText(tClient.url); //
         }
 
-        let storageCorpid = undefined;
-        if (tClient.type === 'workweixin' && tClient.workweixin_corpid) {
-            storageCorpid = encryptText(tClient.workweixin_corpid);
-        }
-
-        let storageAgentid = undefined;
-        if (tClient.type === 'workweixin' && tClient.workweixin_agentid) {
-            storageAgentid = encryptText(tClient.workweixin_agentid);
-        }
-        
-        let finalEncryptedSecret;
+        let storageCorpid, storageAgentid, finalEncryptedSecret;
         if (tClient.type === 'workweixin') {
+            if (tClient.workweixin_corpid) storageCorpid = encryptText(tClient.workweixin_corpid); //
+            if (tClient.workweixin_agentid) storageAgentid = encryptText(tClient.workweixin_agentid); //
+
+            // 处理企业微信密钥的更新逻辑
             if (tClient.hasOwnProperty('workweixin_corpsecret_new')) {
-                if (tClient.workweixin_corpsecret_new && tClient.workweixin_corpsecret_new !== '********') {
-                    finalEncryptedSecret = encryptText(tClient.workweixin_corpsecret_new);
-                } else {
-                    finalEncryptedSecret = encryptText("");
-                }
+                finalEncryptedSecret = (tClient.workweixin_corpsecret_new && tClient.workweixin_corpsecret_new !== '********')
+                    ? encryptText(tClient.workweixin_corpsecret_new) //
+                    : encryptText(""); //
             } else if (existingRawTemplate && existingRawTemplate.corpsecret) {
-                finalEncryptedSecret = existingRawTemplate.corpsecret;
+                finalEncryptedSecret = existingRawTemplate.corpsecret; // 保留旧密钥
             } else {
-                finalEncryptedSecret = encryptText("");
+                finalEncryptedSecret = encryptText(""); // 新建且未提供密钥
             }
-        } else {
-            finalEncryptedSecret = undefined;
         }
 
+        // 移除临时字段，准备合并
         const { workweixin_corpsecret_new, workweixin_corpid, workweixin_agentid, ...restOfTClient } = tClient;
 
         const templateForStorage = {
             ...restOfTClient,
             id: templateId,
-            userId: existingRawTemplate ? existingRawTemplate.userId : adminUserId,
+            userId: existingRawTemplate ? existingRawTemplate.userId : adminUserId, // 保留原始创建者
+            createdAt: existingRawTemplate ? existingRawTemplate.createdAt : new Date().toISOString(), // 保留原始创建时间
+            lastModifiedBy: adminUserId,
+            updatedAt: new Date().toISOString(),
             url: encryptedUrl,
             corpid: storageCorpid,
             corpsecret: finalEncryptedSecret,
@@ -412,11 +415,9 @@ async function saveTemplates(templatesToSaveFromAdmin, adminUserId) {
             workweixin_msgtype: (tClient.type === 'workweixin') ? tClient.workweixin_msgtype : undefined,
             isGlobal: !!tClient.isGlobal,
             allowedUserIds: Array.isArray(tClient.allowedUserIds) ? tClient.allowedUserIds : [],
-            lastModifiedBy: adminUserId,
-            updatedAt: new Date().toISOString(),
-            createdAt: existingRawTemplate ? existingRawTemplate.createdAt : new Date().toISOString()
         };
 
+        // 根据类型清理不必要的字段
         if (templateForStorage.type !== 'workweixin') {
             delete templateForStorage.corpid;
             delete templateForStorage.corpsecret;
@@ -424,27 +425,20 @@ async function saveTemplates(templatesToSaveFromAdmin, adminUserId) {
             delete templateForStorage.workweixin_msgtype;
         } else {
             delete templateForStorage.headers;
-            templateForStorage.isGlobal = true; 
+            templateForStorage.isGlobal = true; // 企微模板强制为全局
             templateForStorage.allowedUserIds = [];
         }
-        if (templateForStorage.isGlobal) { 
+        if (templateForStorage.isGlobal) { // 全局模板不应有特定用户授权
             templateForStorage.allowedUserIds = [];
         }
+        
         return templateForStorage;
     });
 
-    const finalTemplatesToSave = [...allCurrentRawTemplatesInStorage];
-    processedClientTemplates.forEach(processedT => {
-        const index = finalTemplatesToSave.findIndex(existingT => existingT.id === processedT.id);
-        if (index > -1) {
-            finalTemplatesToSave[index] = processedT;
-        } else {
-            finalTemplatesToSave.push(processedT);
-        }
-    });
-
-    await writeFileData(TEMPLATES_FILE, finalTemplatesToSave);
+    // 将处理后的最终列表完整写入文件，实现覆盖
+    await writeFileData(TEMPLATES_FILE, finalTemplatesForStorage); //
 }
+
 
 
 // --- 发送历史记录数据管理 ---
@@ -460,19 +454,19 @@ async function getHistory(webhookId, userId) {
     const entries = await readFileData(historyFilePath, []);
 
     return entries.map(entry => {
-        const entryDec = JSON.parse(JSON.stringify(entry)); 
+        const entryDec = JSON.parse(JSON.stringify(entry));
         if (entryDec.request && entryDec.request.webhookSnapshot && entryDec.request.webhookSnapshot.url) {
-             if (entryDec.request.templateType !== 'workweixin'){ 
+             if (entryDec.request.templateType !== 'workweixin'){
                 entryDec.request.webhookSnapshot.decryptedOriginalUrl = decryptText(entryDec.request.webhookSnapshot.url);
              } else {
                 entryDec.request.webhookSnapshot.decryptedOriginalUrl = "企业微信接口 (自动处理)";
              }
         }
         if (entryDec.request && entryDec.request.templateType === 'workweixin') {
-            if (entryDec.request.workweixinConfig) { 
+            if (entryDec.request.workweixinConfig) {
                 if(entryDec.request.workweixinConfig.corpid) entryDec.request.workweixinConfig.corpid = decryptText(entryDec.request.workweixinConfig.corpid);
                 if(entryDec.request.workweixinConfig.agentid) entryDec.request.workweixinConfig.agentid = decryptText(entryDec.request.workweixinConfig.agentid);
-                delete entryDec.request.workweixinConfig.corpsecret; 
+                delete entryDec.request.workweixinConfig.corpsecret;
             }
         }
         return entryDec;
@@ -488,7 +482,7 @@ async function addHistoryEntry(webhookId, entryData, userId) {
     await writeFileData(historyFilePath, entries.slice(0, 50));
 }
 
-// --- 定时任务数据管理 ---
+// --- 定时任务数据管理 (已优化) ---
 async function getAllRawScheduledTasks(userId) {
     const allTasks = await readFileData(TASKS_FILE, []);
     if (userId) {
@@ -529,33 +523,60 @@ async function getScheduledTasks(userId) {
     });
 }
 
-async function saveScheduledTasks(tasksToSave, userId) {
-    if (userId) {
-        const allTasks = await readFileData(TASKS_FILE, []);
-        const otherUsersTasks = allTasks.filter(task => task.userId !== userId);
-        const newUsersTasks = tasksToSave.map(task => ({
-            ...task,
-            id: task.id || uuidv4(),
-            userId: userId
-        }));
-        await writeFileData(TASKS_FILE, [...otherUsersTasks, ...newUsersTasks]);
-    } else {
-        await writeFileData(TASKS_FILE, tasksToSave.map(task => ({...task, id: task.id || uuidv4() })));
-    }
+/**
+ * [BUG修复] 新增函数：原子化地添加一个定时任务到存储文件。
+ * @param {Object} taskToAdd - 要添加的单个任务对象。
+ */
+async function addScheduledTask(taskToAdd) {
+    const allTasks = await readFileData(TASKS_FILE, []);
+    allTasks.push(taskToAdd);
+    await writeFileData(TASKS_FILE, allTasks);
 }
 
+/**
+ * [BUG修复] 新增函数：原子化地从存储文件中移除一个定时任务。
+ * @param {string} taskIdToRemove - 要移除的任务的ID。
+ * @returns {Promise<Array>} 返回移除任务后剩下的任务数组。
+ */
+async function removeScheduledTask(taskIdToRemove) {
+    const allTasks = await readFileData(TASKS_FILE, []);
+    const remainingTasks = allTasks.filter(task => task.id !== taskIdToRemove);
+    if (allTasks.length === remainingTasks.length) {
+        console.warn(`[StorageService] removeScheduledTask: 未找到ID为 ${taskIdToRemove} 的任务。`);
+    }
+    await writeFileData(TASKS_FILE, remainingTasks);
+    return remainingTasks;
+}
+
+/**
+ * [BUG修复] 重构函数：此函数现在只用于完全覆盖所有任务，例如在初始化清理时。
+ * 不再处理单个用户的逻辑，以避免竞态条件。
+ * @param {Array} tasksToSave - 包含所有需要保存的任务的完整数组。
+ */
+async function saveScheduledTasks(tasksToSave) {
+    const newTasks = tasksToSave.map(task => ({ ...task, id: task.id || uuidv4() }));
+    await writeFileData(TASKS_FILE, newTasks);
+}
+
+
 module.exports = {
-    getUsers, 
+    getUsers,
     findUserByUsername, // Modified to accept includeSensitiveLoginData
     findUserById,       // Modified to accept includePasswordAndLoginData
-    createUser, 
+    createUser,
     updateUser,
     getWebhooks, saveWebhooks, getRawWebhooksForUser,
-    
+
     getAccessibleTemplatesForUserDisplay,
     saveTemplates,
     getRawTemplateByIdForUserAccess,
 
     getHistory, addHistoryEntry,
-    getScheduledTasks, getAllRawScheduledTasks, saveScheduledTasks,
+
+    // 导出优化后的定时任务函数
+    getScheduledTasks,
+    getAllRawScheduledTasks,
+    addScheduledTask,
+    removeScheduledTask,
+    saveScheduledTasks, // 保留用于批量覆盖
 };
